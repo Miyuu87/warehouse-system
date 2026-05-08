@@ -35,6 +35,8 @@ export default function StockWatchPage() {
   const [selectedItem, setSelectedItem] = useState<WatchItem | null>(null)
   const [productMap, setProductMap] = useState<Record<string, ProductData[]>>({})
   const [sortType, setSortType] = useState<SortType>('pinned')
+  const [searchText, setSearchText] = useState('')
+const [stockFilter, setStockFilter] = useState<'all' | 'zero_only' | 'hide_zero'>('all')
 
   const [parentSku, setParentSku] = useState('')
   const [registeredBy, setRegisteredBy] = useState('Miyuu')
@@ -211,28 +213,57 @@ export default function StockWatchPage() {
 }
 
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const stockA = getTotalStock(a)
-      const stockB = getTotalStock(b)
+  const keyword = searchText.trim().toLowerCase()
 
-      if (sortType === 'pinned') {
-        if (Number(b.pinned) !== Number(a.pinned)) {
-          return Number(b.pinned) - Number(a.pinned)
-        }
-        return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
+  let filtered = items.filter((item) => {
+    const rows = getProductRows(item)
+    const totalStock = getTotalStock(item)
+    const name = getMainName(item).toLowerCase()
+    const sku = item.parent_sku.toLowerCase()
+
+    const matchesSearch =
+      !keyword ||
+      name.includes(keyword) ||
+      sku.includes(keyword) ||
+      rows.some((row) => row.sku.toLowerCase().includes(keyword))
+
+    const matchesStock =
+      stockFilter === 'all' ||
+      (stockFilter === 'zero_only' && rows.length > 0 && totalStock === 0) ||
+      (stockFilter === 'hide_zero' && !(rows.length > 0 && totalStock === 0))
+
+    return matchesSearch && matchesStock
+  })
+
+  return filtered.sort((a, b) => {
+    const stockA = getTotalStock(a)
+    const stockB = getTotalStock(b)
+
+    if (sortType === 'pinned') {
+      if (Number(b.pinned) !== Number(a.pinned)) {
+        return Number(b.pinned) - Number(a.pinned)
       }
 
-      if (sortType === 'stock_asc') {
-        return stockA - stockB
-      }
+      return (
+        new Date(b.created_at || '').getTime() -
+        new Date(a.created_at || '').getTime()
+      )
+    }
 
-      if (sortType === 'stock_desc') {
-        return stockB - stockA
-      }
+    if (sortType === 'stock_asc') {
+      return stockA - stockB
+    }
 
-      return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
-    })
-  }, [items, productMap, sortType])
+    if (sortType === 'stock_desc') {
+      return stockB - stockA
+    }
+
+    return (
+      new Date(b.created_at || '').getTime() -
+      new Date(a.created_at || '').getTime()
+    )
+  })
+}, [items, productMap, sortType, searchText, stockFilter])
 
   return (
     <main style={pageStyle}>
@@ -254,6 +285,33 @@ export default function StockWatchPage() {
         </label>
       </div>
 
+<section style={filterStyle}>
+  <label style={labelStyle}>
+    検索
+    <input
+      value={searchText}
+      onChange={(e) => setSearchText(e.target.value)}
+      placeholder="商品名 / SKUで検索"
+      style={inputStyle}
+    />
+  </label>
+
+  <label style={labelStyle}>
+    在庫表示
+    <select
+      value={stockFilter}
+      onChange={(e) =>
+        setStockFilter(e.target.value as 'all' | 'zero_only' | 'hide_zero')
+      }
+      style={inputStyle}
+    >
+      <option value="all">すべて表示</option>
+      <option value="zero_only">在庫0だけ表示</option>
+      <option value="hide_zero">在庫0を非表示</option>
+    </select>
+  </label>
+</section>
+      
       <section style={formStyle}>
         <label style={labelStyle}>
           親SKU
@@ -858,4 +916,15 @@ const miniButtonStyle: React.CSSProperties = {
   background: '#fff',
   cursor: 'pointer',
   fontWeight: 800,
+}
+const filterStyle: React.CSSProperties = {
+  background: '#fff',
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 16,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+  display: 'grid',
+  gridTemplateColumns: '2fr 1fr',
+  gap: 12,
+  alignItems: 'end',
 }
