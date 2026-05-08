@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -28,19 +28,18 @@ type ProductData = {
   stock: number
 }
 
-const comments = ['広告配信中', '再入荷未定', '今売れてる', '残り1点']
+type SortType = 'pinned' | 'stock_asc' | 'stock_desc' | 'newest'
 
 export default function StockWatchPage() {
   const [items, setItems] = useState<WatchItem[]>([])
   const [selectedItem, setSelectedItem] = useState<WatchItem | null>(null)
   const [productMap, setProductMap] = useState<Record<string, ProductData[]>>({})
+  const [sortType, setSortType] = useState<SortType>('pinned')
 
   const [parentSku, setParentSku] = useState('')
   const [registeredBy, setRegisteredBy] = useState('Miyuu')
-  const [comment, setComment] = useState('広告配信中')
+  const [comment, setComment] = useState('')
   const [pinned, setPinned] = useState(false)
-  const [productUrl, setProductUrl] = useState('')
-  const [imageUrl, setImageUrl] = useState('')
 
   useEffect(() => {
     fetchItems()
@@ -129,10 +128,10 @@ export default function StockWatchPage() {
     const { error } = await supabase.from('stock_watch_items').insert({
       parent_sku: sku,
       registered_by: registeredBy.trim() || '未入力',
-      comment,
+      comment: comment.trim(),
       pinned,
-      product_url: productUrl.trim(),
-      image_url: imageUrl.trim(),
+      product_url: '',
+      image_url: '',
     })
 
     if (error) {
@@ -141,10 +140,8 @@ export default function StockWatchPage() {
     }
 
     setParentSku('')
-    setProductUrl('')
-    setImageUrl('')
+    setComment('')
     setPinned(false)
-    setComment('広告配信中')
     fetchItems()
   }
 
@@ -154,10 +151,8 @@ export default function StockWatchPage() {
       .update({
         parent_sku: item.parent_sku,
         registered_by: item.registered_by,
-        comment: item.comment,
+        comment: item.comment || '',
         pinned: item.pinned,
-        product_url: item.product_url || '',
-        image_url: item.image_url || '',
       })
       .eq('id', item.id)
 
@@ -188,16 +183,6 @@ export default function StockWatchPage() {
     setItems((current) => current.filter((item) => item.id !== id))
   }
 
-  async function copyUrl(url?: string) {
-    if (!url) {
-      alert('URLが未入力です')
-      return
-    }
-
-    await navigator.clipboard.writeText(url)
-    alert('URLをコピーしました')
-  }
-
   function getProductRows(item: WatchItem) {
     return productMap[item.parent_sku] || []
   }
@@ -207,16 +192,56 @@ export default function StockWatchPage() {
   }
 
   function getMainImage(item: WatchItem) {
-    return getProductRows(item)[0]?.image_url || item.image_url || ''
+    return getProductRows(item)[0]?.image_url || ''
   }
 
   function getMainName(item: WatchItem) {
     return getProductRows(item)[0]?.product_name || item.parent_sku
   }
 
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const stockA = getTotalStock(a)
+      const stockB = getTotalStock(b)
+
+      if (sortType === 'pinned') {
+        if (Number(b.pinned) !== Number(a.pinned)) {
+          return Number(b.pinned) - Number(a.pinned)
+        }
+        return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
+      }
+
+      if (sortType === 'stock_asc') {
+        return stockA - stockB
+      }
+
+      if (sortType === 'stock_desc') {
+        return stockB - stockA
+      }
+
+      return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
+    })
+  }, [items, productMap, sortType])
+
   return (
     <main style={pageStyle}>
-      <h1 style={titleStyle}>在庫注視アイテム</h1>
+      <div style={headerRowStyle}>
+        <h1 style={titleStyle}>在庫注視アイテム</h1>
+
+        <label style={sortLabelStyle}>
+          並び順
+          <select
+            value={sortType}
+            onChange={(e) => setSortType(e.target.value as SortType)}
+            style={sortSelectStyle}
+          >
+            <option value="pinned">ピン留め優先</option>
+            <option value="stock_asc">在庫少ない順</option>
+            <option value="stock_desc">在庫多い順</option>
+            <option value="newest">登録新しい順</option>
+          </select>
+        </label>
+      </div>
 
       <section style={formStyle}>
         <label style={labelStyle}>
@@ -224,7 +249,7 @@ export default function StockWatchPage() {
           <input
             value={parentSku}
             onChange={(e) => setParentSku(e.target.value)}
-            placeholder="GREMLINS"
+            placeholder="CT7000BK"
             style={inputStyle}
           />
         </label>
@@ -239,37 +264,12 @@ export default function StockWatchPage() {
           />
         </label>
 
-        <label style={labelStyle}>
+        <label style={{ ...labelStyle, gridColumn: 'span 2' }}>
           コメント
-          <select
+          <input
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            style={inputStyle}
-          >
-            {comments.map((text) => (
-              <option key={text} value={text}>
-                {text}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label style={labelStyle}>
-          商品URL
-          <input
-            value={productUrl}
-            onChange={(e) => setProductUrl(e.target.value)}
-            placeholder="https://..."
-            style={inputStyle}
-          />
-        </label>
-
-        <label style={labelStyle}>
-          画像URL
-          <input
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://..."
+            placeholder="広告配信中 / 再入荷未定 / 今売れてる など"
             style={inputStyle}
           />
         </label>
@@ -289,11 +289,11 @@ export default function StockWatchPage() {
       </section>
 
       <div style={gridStyle}>
-        {items.map((item) => {
+        {sortedItems.map((item) => {
           const totalStock = getTotalStock(item)
           const rows = getProductRows(item)
           const isSoldOut = rows.length > 0 && totalStock === 0
-          const isLowStock = totalStock === 1 || item.comment === '残り1点'
+          const isLowStock = totalStock === 1
           const mainImage = getMainImage(item)
 
           return (
@@ -315,6 +315,8 @@ export default function StockWatchPage() {
               </div>
 
               <div style={{ padding: 16 }}>
+                {item.comment && <div style={commentStyle}>{item.comment}</div>}
+
                 <h2 style={cardTitleStyle}>{getMainName(item)}</h2>
 
                 <p style={skuTextStyle}>SKU: {item.parent_sku}</p>
@@ -323,8 +325,6 @@ export default function StockWatchPage() {
                 <p style={subTextStyle}>
                   在庫合計：{rows.length > 0 ? totalStock : '未取得'}
                 </p>
-
-                <div style={commentStyle}>{item.comment}</div>
 
                 <div style={buttonRowStyle}>
                   <button
@@ -405,24 +405,19 @@ export default function StockWatchPage() {
                 />
               </label>
 
-              <label style={labelStyle}>
+              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
                 コメント
-                <select
-                  value={selectedItem.comment || '広告配信中'}
+                <input
+                  value={selectedItem.comment || ''}
                   onChange={(e) =>
                     setSelectedItem({
                       ...selectedItem,
                       comment: e.target.value,
                     })
                   }
+                  placeholder="広告配信中 / 再入荷未定 / 今売れてる など"
                   style={inputStyle}
-                >
-                  {comments.map((text) => (
-                    <option key={text} value={text}>
-                      {text}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
 
               <label style={checkStyle}>
@@ -437,36 +432,6 @@ export default function StockWatchPage() {
                   }
                 />
                 ピン留め
-              </label>
-
-              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
-                商品URL
-                <input
-                  value={selectedItem.product_url || ''}
-                  onChange={(e) =>
-                    setSelectedItem({
-                      ...selectedItem,
-                      product_url: e.target.value,
-                    })
-                  }
-                  placeholder="https://..."
-                  style={inputStyle}
-                />
-              </label>
-
-              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
-                画像URL
-                <input
-                  value={selectedItem.image_url || ''}
-                  onChange={(e) =>
-                    setSelectedItem({
-                      ...selectedItem,
-                      image_url: e.target.value,
-                    })
-                  }
-                  placeholder="https://..."
-                  style={inputStyle}
-                />
               </label>
             </div>
 
@@ -519,28 +484,6 @@ export default function StockWatchPage() {
                 保存
               </button>
 
-              <a
-                href={selectedItem.product_url || '#'}
-                target="_blank"
-                rel="noreferrer"
-                style={detailButtonStyle}
-                onClick={(e) => {
-                  if (!selectedItem.product_url) {
-                    e.preventDefault()
-                    alert('商品URLが未入力です')
-                  }
-                }}
-              >
-                開く
-              </a>
-
-              <button
-                onClick={() => copyUrl(selectedItem.product_url)}
-                style={detailButtonStyle}
-              >
-                URLコピー
-              </button>
-
               <button
                 onClick={() => deleteItem(selectedItem.id)}
                 style={modalDeleteButtonStyle}
@@ -562,10 +505,34 @@ const pageStyle: React.CSSProperties = {
   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 }
 
+const headerRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 16,
+  marginBottom: 20,
+}
+
 const titleStyle: React.CSSProperties = {
   fontSize: 32,
   fontWeight: 800,
-  marginBottom: 20,
+  margin: 0,
+}
+
+const sortLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  fontWeight: 700,
+}
+
+const sortSelectStyle: React.CSSProperties = {
+  height: 44,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  padding: '0 12px',
+  background: '#fff',
+  fontWeight: 700,
 }
 
 const formStyle: React.CSSProperties = {
@@ -575,7 +542,7 @@ const formStyle: React.CSSProperties = {
   marginBottom: 24,
   boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr auto auto',
+  gridTemplateColumns: '1fr 1fr 2fr auto auto',
   gap: 12,
   alignItems: 'end',
 }
@@ -714,12 +681,13 @@ const skuTextStyle: React.CSSProperties = {
 
 const commentStyle: React.CSSProperties = {
   display: 'inline-block',
-  background: '#111',
-  color: '#fff',
-  padding: '8px 12px',
+  background: '#ffe45c',
+  color: '#111',
+  padding: '7px 11px',
   borderRadius: 999,
   fontSize: 12,
-  marginBottom: 16,
+  fontWeight: 800,
+  marginBottom: 10,
 }
 
 const buttonRowStyle: React.CSSProperties = {
