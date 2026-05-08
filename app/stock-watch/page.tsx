@@ -354,7 +354,7 @@ export default function StockWatchPage() {
     }}
     style={miniButtonStyle}
   >
-    🔗
+    🌐
   </button>
 
   <button
@@ -367,7 +367,7 @@ export default function StockWatchPage() {
     }}
     style={miniButtonStyle}
   >
-    URL
+    🔗
   </button>
 
   <button
