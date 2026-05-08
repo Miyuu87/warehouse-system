@@ -19,16 +19,21 @@ type WatchItem = {
   created_at?: string
 }
 
-const comments = [
-  '広告配信中',
-  '再入荷未定',
-  '今売れてる',
-  '残り1点',
-]
+type ProductData = {
+  sku: string
+  product_name: string
+  option_name?: string
+  image_url?: string
+  product_id?: string
+  stock: number
+}
+
+const comments = ['広告配信中', '再入荷未定', '今売れてる', '残り1点']
 
 export default function StockWatchPage() {
   const [items, setItems] = useState<WatchItem[]>([])
   const [selectedItem, setSelectedItem] = useState<WatchItem | null>(null)
+  const [productMap, setProductMap] = useState<Record<string, ProductData[]>>({})
 
   const [parentSku, setParentSku] = useState('')
   const [registeredBy, setRegisteredBy] = useState('Miyuu')
@@ -54,6 +59,63 @@ export default function StockWatchPage() {
     }
 
     setItems(data || [])
+
+    for (const item of data || []) {
+      fetchProductData(item.parent_sku)
+    }
+  }
+
+  async function fetchProductData(parentSku: string) {
+    const { data: products, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .ilike('sku', `${parentSku}%`)
+
+    if (productError) {
+      console.error(productError)
+      return []
+    }
+
+    if (!products || products.length === 0) {
+      setProductMap((prev) => ({
+        ...prev,
+        [parentSku]: [],
+      }))
+      return []
+    }
+
+    const skuList = products.map((p) => p.sku)
+
+    const { data: stocks, error: stockError } = await supabase
+      .from('stock_by_location')
+      .select('*')
+      .in('sku', skuList)
+
+    if (stockError) {
+      console.error(stockError)
+    }
+
+    const stockMap: Record<string, number> = {}
+
+    for (const row of stocks || []) {
+      stockMap[row.sku] = (stockMap[row.sku] || 0) + (row.qty || 0)
+    }
+
+    const merged: ProductData[] = products.map((p) => ({
+      sku: p.sku,
+      product_name: p.product_name,
+      option_name: p.option_name,
+      image_url: p.image_url,
+      product_id: p.product_id,
+      stock: stockMap[p.sku] || 0,
+    }))
+
+    setProductMap((prev) => ({
+      ...prev,
+      [parentSku]: merged,
+    }))
+
+    return merged
   }
 
   async function addItem() {
@@ -64,16 +126,14 @@ export default function StockWatchPage() {
       return
     }
 
-    const { error } = await supabase
-      .from('stock_watch_items')
-      .insert({
-        parent_sku: sku,
-        registered_by: registeredBy.trim() || '未入力',
-        comment,
-        pinned,
-        product_url: productUrl.trim(),
-        image_url: imageUrl.trim(),
-      })
+    const { error } = await supabase.from('stock_watch_items').insert({
+      parent_sku: sku,
+      registered_by: registeredBy.trim() || '未入力',
+      comment,
+      pinned,
+      product_url: productUrl.trim(),
+      image_url: imageUrl.trim(),
+    })
 
     if (error) {
       alert('登録エラー: ' + error.message)
@@ -136,6 +196,22 @@ export default function StockWatchPage() {
 
     await navigator.clipboard.writeText(url)
     alert('URLをコピーしました')
+  }
+
+  function getProductRows(item: WatchItem) {
+    return productMap[item.parent_sku] || []
+  }
+
+  function getTotalStock(item: WatchItem) {
+    return getProductRows(item).reduce((sum, row) => sum + row.stock, 0)
+  }
+
+  function getMainImage(item: WatchItem) {
+    return getProductRows(item)[0]?.image_url || item.image_url || ''
+  }
+
+  function getMainName(item: WatchItem) {
+    return getProductRows(item)[0]?.product_name || item.parent_sku
   }
 
   return (
@@ -213,51 +289,62 @@ export default function StockWatchPage() {
       </section>
 
       <div style={gridStyle}>
-        {items.map((item) => (
-          <div key={item.id} style={cardStyle}>
-            <div style={imageBoxStyle}>
-              {item.image_url ? (
-                <img
-                  src={item.image_url}
-                  alt={item.parent_sku}
-                  style={imageStyle}
-                />
-              ) : (
-                <div style={noImageStyle}>NO IMAGE</div>
-              )}
+        {items.map((item) => {
+          const totalStock = getTotalStock(item)
+          const rows = getProductRows(item)
+          const isSoldOut = rows.length > 0 && totalStock === 0
+          const isLowStock = totalStock === 1 || item.comment === '残り1点'
+          const mainImage = getMainImage(item)
 
-              {item.comment === '残り1点' && (
-                <div style={stockBadgeStyle}>残り1点</div>
-              )}
+          return (
+            <div key={item.id} style={cardStyle}>
+              <div style={imageBoxStyle}>
+                {mainImage ? (
+                  <img src={mainImage} alt={item.parent_sku} style={imageStyle} />
+                ) : (
+                  <div style={noImageStyle}>NO IMAGE</div>
+                )}
 
-              {item.pinned && <div style={pinStyle}>📌</div>}
-            </div>
+                {isSoldOut && <div style={soldOutOverlayStyle}>完売</div>}
 
-            <div style={{ padding: 16 }}>
-              <h2 style={cardTitleStyle}>{item.parent_sku}</h2>
+                {isLowStock && !isSoldOut && (
+                  <div style={stockBadgeStyle}>残り1点</div>
+                )}
 
-              <p style={subTextStyle}>👤 {item.registered_by}</p>
+                {item.pinned && <div style={pinStyle}>📌</div>}
+              </div>
 
-              <div style={commentStyle}>{item.comment}</div>
+              <div style={{ padding: 16 }}>
+                <h2 style={cardTitleStyle}>{getMainName(item)}</h2>
 
-              <div style={buttonRowStyle}>
-                <button
-                  onClick={() => setSelectedItem(item)}
-                  style={detailButtonStyle}
-                >
-                  詳細
-                </button>
+                <p style={skuTextStyle}>SKU: {item.parent_sku}</p>
+                <p style={subTextStyle}>👤 {item.registered_by}</p>
 
-                <button
-                  onClick={() => deleteItem(item.id)}
-                  style={deleteButtonStyle}
-                >
-                  ×
-                </button>
+                <p style={subTextStyle}>
+                  在庫合計：{rows.length > 0 ? totalStock : '未取得'}
+                </p>
+
+                <div style={commentStyle}>{item.comment}</div>
+
+                <div style={buttonRowStyle}>
+                  <button
+                    onClick={() => setSelectedItem(item)}
+                    style={detailButtonStyle}
+                  >
+                    詳細
+                  </button>
+
+                  <button
+                    onClick={() => deleteItem(item.id)}
+                    style={deleteButtonStyle}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {items.length === 0 && (
@@ -270,20 +357,17 @@ export default function StockWatchPage() {
         <div style={modalOverlayStyle}>
           <div style={modalStyle}>
             <div style={modalHeaderStyle}>
-              <h2 style={modalTitleStyle}>{selectedItem.parent_sku}</h2>
+              <h2 style={modalTitleStyle}>{getMainName(selectedItem)}</h2>
 
-              <button
-                onClick={() => setSelectedItem(null)}
-                style={modalCloseStyle}
-              >
+              <button onClick={() => setSelectedItem(null)} style={modalCloseStyle}>
                 ×
               </button>
             </div>
 
             <div style={modalImageBoxStyle}>
-              {selectedItem.image_url ? (
+              {getMainImage(selectedItem) ? (
                 <img
-                  src={selectedItem.image_url}
+                  src={getMainImage(selectedItem)}
                   alt={selectedItem.parent_sku}
                   style={imageStyle}
                 />
@@ -386,11 +470,52 @@ export default function StockWatchPage() {
               </label>
             </div>
 
+            <div style={stockListWrapStyle}>
+              <h3 style={stockListTitleStyle}>オプション別在庫</h3>
+
+              {(productMap[selectedItem.parent_sku] || []).length === 0 ? (
+                <p style={{ color: '#666' }}>
+                  この親SKUに一致する商品データがまだ見つかっていません。
+                </p>
+              ) : (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {(productMap[selectedItem.parent_sku] || []).map((row) => (
+                    <div
+                      key={row.sku}
+                      style={{
+                        ...stockRowStyle,
+                        background: row.stock === 0 ? '#f1f1f1' : '#fff',
+                        opacity: row.stock === 0 ? 0.55 : 1,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800 }}>
+                          {row.option_name || row.sku}
+                        </div>
+
+                        <div style={skuTextStyle}>{row.sku}</div>
+
+                        {row.product_id && (
+                          <div style={skuTextStyle}>商品番号: {row.product_id}</div>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          ...stockNumberStyle,
+                          color: row.stock <= 1 ? '#ff3b30' : '#111',
+                        }}
+                      >
+                        {row.stock}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div style={modalButtonRowStyle}>
-              <button
-                onClick={() => updateItem(selectedItem)}
-                style={detailButtonStyle}
-              >
+              <button onClick={() => updateItem(selectedItem)} style={detailButtonStyle}>
                 保存
               </button>
 
@@ -434,8 +559,7 @@ const pageStyle: React.CSSProperties = {
   padding: 24,
   background: '#f5f5f5',
   minHeight: '100vh',
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 }
 
 const titleStyle: React.CSSProperties = {
@@ -532,6 +656,18 @@ const noImageStyle: React.CSSProperties = {
   letterSpacing: 1,
 }
 
+const soldOutOverlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background: 'rgba(80,80,80,0.65)',
+  color: '#fff',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 28,
+  fontWeight: 900,
+}
+
 const stockBadgeStyle: React.CSSProperties = {
   position: 'absolute',
   top: 12,
@@ -567,7 +703,13 @@ const cardTitleStyle: React.CSSProperties = {
 const subTextStyle: React.CSSProperties = {
   fontSize: 14,
   color: '#666',
-  marginBottom: 12,
+  marginBottom: 8,
+}
+
+const skuTextStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#777',
+  marginBottom: 8,
 }
 
 const commentStyle: React.CSSProperties = {
@@ -621,7 +763,7 @@ const modalOverlayStyle: React.CSSProperties = {
 
 const modalStyle: React.CSSProperties = {
   width: '100%',
-  maxWidth: 760,
+  maxWidth: 820,
   maxHeight: '90vh',
   overflow: 'auto',
   background: '#fff',
@@ -662,6 +804,32 @@ const modalGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
   gap: 12,
+}
+
+const stockListWrapStyle: React.CSSProperties = {
+  marginTop: 24,
+  borderTop: '1px solid #eee',
+  paddingTop: 20,
+}
+
+const stockListTitleStyle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 800,
+  marginBottom: 12,
+}
+
+const stockRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 12,
+  border: '1px solid #eee',
+  borderRadius: 12,
+}
+
+const stockNumberStyle: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
 }
 
 const modalButtonRowStyle: React.CSSProperties = {
