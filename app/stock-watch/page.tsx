@@ -14,7 +14,7 @@ type WatchItem = {
   registered_by: string
   comment: string
   pinned: boolean
-  created_at?: string
+  product_url: string
 }
 
 const comments = [
@@ -26,78 +26,75 @@ const comments = [
 
 export default function StockWatchPage() {
   const [items, setItems] = useState<WatchItem[]>([])
+  const [selectedItem, setSelectedItem] =
+    useState<WatchItem | null>(null)
+
   const [parentSku, setParentSku] = useState('')
-  const [registeredBy, setRegisteredBy] = useState('Miyuu')
-  const [comment, setComment] = useState('広告配信中')
+  const [registeredBy, setRegisteredBy] =
+    useState('Miyuu')
+  const [comment, setComment] =
+    useState('広告配信中')
   const [pinned, setPinned] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [productUrl, setProductUrl] = useState('')
 
   useEffect(() => {
     fetchItems()
   }, [])
 
   async function fetchItems() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('stock_watch_items')
       .select('*')
       .order('pinned', { ascending: false })
       .order('created_at', { ascending: false })
 
-    if (error) {
-      alert('読み込みエラー: ' + error.message)
-      return
-    }
-
     setItems(data || [])
   }
 
   async function addItem() {
-    const sku = parentSku.trim()
-
-    if (!sku) {
+    if (!parentSku.trim()) {
       alert('SKUを入力してください')
       return
     }
 
-    setLoading(true)
-
     const { error } = await supabase
       .from('stock_watch_items')
       .insert({
-        parent_sku: sku,
-        registered_by: registeredBy.trim() || '未入力',
+        parent_sku: parentSku,
+        registered_by: registeredBy,
         comment,
         pinned,
+        product_url: productUrl,
       })
 
-    setLoading(false)
-
     if (error) {
-      alert('登録エラー: ' + error.message)
+      alert(error.message)
       return
     }
 
     setParentSku('')
-    setComment('広告配信中')
-    setPinned(false)
+    setProductUrl('')
     fetchItems()
   }
 
   async function deleteItem(id: number) {
-    const ok = confirm('この注視アイテムを削除しますか？')
+    const ok = confirm('削除しますか？')
+
     if (!ok) return
 
-    const { error } = await supabase
+    await supabase
       .from('stock_watch_items')
       .delete()
       .eq('id', id)
 
-    if (error) {
-      alert('削除エラー: ' + error.message)
-      return
-    }
+    setSelectedItem(null)
 
-    setItems((current) => current.filter((item) => item.id !== id))
+    fetchItems()
+  }
+
+  async function copyUrl(url: string) {
+    await navigator.clipboard.writeText(url)
+    alert('URLをコピーしました')
   }
 
   return (
@@ -106,114 +103,124 @@ export default function StockWatchPage() {
         padding: 24,
         background: '#f5f5f5',
         minHeight: '100vh',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
       }}
     >
-      <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 20 }}>
+      <h1
+        style={{
+          fontSize: 32,
+          fontWeight: 800,
+          marginBottom: 24,
+        }}
+      >
         在庫注視アイテム
       </h1>
 
-      <section
+      <div
         style={{
           background: '#fff',
-          borderRadius: 18,
-          padding: 18,
+          padding: 20,
+          borderRadius: 20,
           marginBottom: 24,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
           display: 'grid',
-          gridTemplateColumns: '1.3fr 1fr 1fr auto auto',
+          gridTemplateColumns:
+            '1fr 1fr 1fr 1fr auto auto',
           gap: 12,
           alignItems: 'end',
         }}
       >
-        <label style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
-          親SKU
+        <div>
+          <label>親SKU</label>
+
           <input
             value={parentSku}
-            onChange={(e) => setParentSku(e.target.value)}
-            placeholder="例：GREMLINS"
+            onChange={(e) =>
+              setParentSku(e.target.value)
+            }
+            placeholder='GREMLINS'
             style={inputStyle}
           />
-        </label>
+        </div>
 
-        <label style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
-          登録者
+        <div>
+          <label>登録者</label>
+
           <input
             value={registeredBy}
-            onChange={(e) => setRegisteredBy(e.target.value)}
-            placeholder="Miyuu"
+            onChange={(e) =>
+              setRegisteredBy(e.target.value)
+            }
             style={inputStyle}
           />
-        </label>
+        </div>
 
-        <label style={{ display: 'grid', gap: 6, fontWeight: 700 }}>
-          コメント
+        <div>
+          <label>コメント</label>
+
           <select
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={(e) =>
+              setComment(e.target.value)
+            }
             style={inputStyle}
           >
-            {comments.map((text) => (
-              <option key={text} value={text}>
-                {text}
-              </option>
+            {comments.map((c) => (
+              <option key={c}>{c}</option>
             ))}
           </select>
-        </label>
+        </div>
+
+        <div>
+          <label>商品URL</label>
+
+          <input
+            value={productUrl}
+            onChange={(e) =>
+              setProductUrl(e.target.value)
+            }
+            placeholder='https://...'
+            style={inputStyle}
+          />
+        </div>
 
         <label
           style={{
-            height: 48,
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
+            height: 48,
           }}
         >
           <input
-            type="checkbox"
+            type='checkbox'
             checked={pinned}
-            onChange={(e) => setPinned(e.target.checked)}
+            onChange={(e) =>
+              setPinned(e.target.checked)
+            }
           />
+
           ピン留め
         </label>
 
         <button
           onClick={addItem}
-          disabled={loading}
-          style={{
-            height: 48,
-            padding: '0 20px',
-            borderRadius: 12,
-            border: 'none',
-            background: '#111',
-            color: '#fff',
-            fontWeight: 800,
-            cursor: 'pointer',
-          }}
+          style={addButtonStyle}
         >
-          {loading ? '登録中...' : '追加'}
+          追加
         </button>
-      </section>
+      </div>
 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))',
+          gridTemplateColumns:
+            'repeat(auto-fill,minmax(280px,1fr))',
           gap: 20,
         }}
       >
         {items.map((item) => (
           <div
             key={item.id}
-            style={{
-              background: '#fff',
-              borderRadius: 20,
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-            }}
+            style={cardStyle}
           >
             <div
               style={{
@@ -224,42 +231,13 @@ export default function StockWatchPage() {
               }}
             >
               {item.comment === '残り1点' && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    left: 12,
-                    background: '#ff3b30',
-                    color: '#fff',
-                    padding: '6px 10px',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    fontWeight: 800,
-                  }}
-                >
+                <div style={stockBadgeStyle}>
                   残り1点
                 </div>
               )}
 
               {item.pinned && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    right: 12,
-                    background: '#111',
-                    color: '#fff',
-                    width: 36,
-                    height: 36,
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18,
-                  }}
-                >
-                  📌
-                </div>
+                <div style={pinStyle}>📌</div>
               )}
             </div>
 
@@ -268,57 +246,45 @@ export default function StockWatchPage() {
                 style={{
                   fontSize: 22,
                   fontWeight: 800,
-                  marginBottom: 8,
                 }}
               >
                 {item.parent_sku}
               </h2>
 
-              <p style={{ fontSize: 14, color: '#666', marginBottom: 12 }}>
+              <p
+                style={{
+                  color: '#666',
+                  marginTop: 8,
+                }}
+              >
                 👤 {item.registered_by}
               </p>
 
-              <div
-                style={{
-                  display: 'inline-block',
-                  background: '#111',
-                  color: '#fff',
-                  padding: '8px 12px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  marginBottom: 16,
-                }}
-              >
+              <div style={commentStyle}>
                 {item.comment}
               </div>
 
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  marginTop: 16,
+                }}
+              >
                 <button
-                  style={{
-                    flex: 1,
-                    padding: 12,
-                    borderRadius: 12,
-                    border: 'none',
-                    background: '#111',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    fontWeight: 800,
-                  }}
+                  onClick={() =>
+                    setSelectedItem(item)
+                  }
+                  style={detailButtonStyle}
                 >
                   詳細
                 </button>
 
                 <button
-                  onClick={() => deleteItem(item.id)}
-                  style={{
-                    width: 48,
-                    borderRadius: 12,
-                    border: '1px solid #ddd',
-                    background: '#fff',
-                    cursor: 'pointer',
-                    fontWeight: 800,
-                    fontSize: 18,
-                  }}
+                  onClick={() =>
+                    deleteItem(item.id)
+                  }
+                  style={deleteButtonStyle}
                 >
                   ×
                 </button>
@@ -328,20 +294,229 @@ export default function StockWatchPage() {
         ))}
       </div>
 
-      {items.length === 0 && (
-        <p style={{ color: '#666', marginTop: 24 }}>
-          まだ注視アイテムが登録されていません。
-        </p>
+      {selectedItem && (
+        <div style={modalOverlayStyle}>
+          <div style={modalStyle}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent:
+                  'space-between',
+                marginBottom: 20,
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: 28,
+                  fontWeight: 800,
+                }}
+              >
+                {selectedItem.parent_sku}
+              </h2>
+
+              <button
+                onClick={() =>
+                  setSelectedItem(null)
+                }
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  fontSize: 28,
+                  cursor: 'pointer',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+              }}
+            >
+              <div>
+                👤 {selectedItem.registered_by}
+              </div>
+
+              <div>
+                💬 {selectedItem.comment}
+              </div>
+
+              <div>
+                📌{' '}
+                {selectedItem.pinned
+                  ? 'ピン留め'
+                  : 'なし'}
+              </div>
+
+              <div>
+                🔗 商品URL
+              </div>
+
+              <input
+                value={
+                  selectedItem.product_url || ''
+                }
+                readOnly
+                style={inputStyle}
+              />
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  marginTop: 12,
+                }}
+              >
+                <a
+                  href={
+                    selectedItem.product_url
+                  }
+                  target='_blank'
+                  style={detailButtonStyle}
+                >
+                  開く
+                </a>
+
+                <button
+                  onClick={() =>
+                    copyUrl(
+                      selectedItem.product_url
+                    )
+                  }
+                  style={detailButtonStyle}
+                >
+                  URLコピー
+                </button>
+
+                <button
+                  onClick={() =>
+                    deleteItem(
+                      selectedItem.id
+                    )
+                  }
+                  style={{
+                    ...deleteButtonStyle,
+                    width: 120,
+                  }}
+                >
+                  削除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )
 }
 
 const inputStyle: React.CSSProperties = {
+  width: '100%',
   height: 48,
   borderRadius: 12,
   border: '1px solid #ddd',
   padding: '0 12px',
-  fontSize: 16,
+  marginTop: 6,
+}
+
+const addButtonStyle: React.CSSProperties = {
+  height: 48,
+  borderRadius: 12,
+  border: 'none',
+  background: '#111',
+  color: '#fff',
+  fontWeight: 700,
+  padding: '0 24px',
+  cursor: 'pointer',
+}
+
+const cardStyle: React.CSSProperties = {
   background: '#fff',
+  borderRadius: 20,
+  overflow: 'hidden',
+  boxShadow:
+    '0 4px 16px rgba(0,0,0,0.08)',
+}
+
+const stockBadgeStyle: React.CSSProperties =
+  {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    background: '#ff3b30',
+    color: '#fff',
+    padding: '6px 10px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  }
+
+const pinStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 12,
+  right: 12,
+  background: '#111',
+  color: '#fff',
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+
+const commentStyle: React.CSSProperties = {
+  display: 'inline-block',
+  background: '#111',
+  color: '#fff',
+  padding: '8px 12px',
+  borderRadius: 999,
+  fontSize: 12,
+  marginTop: 12,
+}
+
+const detailButtonStyle: React.CSSProperties =
+  {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    border: 'none',
+    background: '#111',
+    color: '#fff',
+    cursor: 'pointer',
+    fontWeight: 700,
+    textAlign: 'center',
+    textDecoration: 'none',
+  }
+
+const deleteButtonStyle: React.CSSProperties =
+  {
+    width: 48,
+    borderRadius: 12,
+    border: '1px solid #ddd',
+    background: '#fff',
+    cursor: 'pointer',
+    fontWeight: 700,
+  }
+
+const modalOverlayStyle: React.CSSProperties =
+  {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    zIndex: 1000,
+  }
+
+const modalStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 700,
+  background: '#fff',
+  borderRadius: 24,
+  padding: 24,
 }
