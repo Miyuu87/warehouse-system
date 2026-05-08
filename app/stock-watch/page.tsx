@@ -198,6 +198,17 @@ export default function StockWatchPage() {
   function getMainName(item: WatchItem) {
     return getProductRows(item)[0]?.product_name || item.parent_sku
   }
+  function getProductUrl(item: WatchItem) {
+  const rows = getProductRows(item)
+
+  if (!rows.length) return ''
+
+  const productId = rows[0]?.product_id
+
+  if (!productId) return ''
+
+  return `https://noiseandkisses.com/?pid=${productId}`
+}
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -327,20 +338,45 @@ export default function StockWatchPage() {
                 </p>
 
                 <div style={buttonRowStyle}>
-                  <button
-                    onClick={() => setSelectedItem(item)}
-                    style={detailButtonStyle}
-                  >
-                    詳細
-                  </button>
+  <button
+    onClick={() => setSelectedItem(item)}
+    style={detailButtonStyle}
+  >
+    詳細
+  </button>
 
-                  <button
-                    onClick={() => deleteItem(item.id)}
-                    style={deleteButtonStyle}
-                  >
-                    ×
-                  </button>
-                </div>
+  <button
+    onClick={() => {
+      const url = getProductUrl(item)
+      if (url) {
+        window.open(url, '_blank')
+      }
+    }}
+    style={miniButtonStyle}
+  >
+    開
+  </button>
+
+  <button
+    onClick={() => {
+      const url = getProductUrl(item)
+      if (url) {
+        navigator.clipboard.writeText(url)
+        alert('URLコピーしました')
+      }
+    }}
+    style={miniButtonStyle}
+  >
+    URL
+  </button>
+
+  <button
+    onClick={() => deleteItem(item.id)}
+    style={deleteButtonStyle}
+  >
+    ×
+  </button>
+</div>
               </div>
             </div>
           )
@@ -809,6 +845,14 @@ const modalButtonRowStyle: React.CSSProperties = {
 const modalDeleteButtonStyle: React.CSSProperties = {
   width: 120,
   padding: 12,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  background: '#fff',
+  cursor: 'pointer',
+  fontWeight: 800,
+}
+const miniButtonStyle: React.CSSProperties = {
+  width: 54,
   borderRadius: 12,
   border: '1px solid #ddd',
   background: '#fff',
