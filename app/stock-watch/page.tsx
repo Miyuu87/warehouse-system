@@ -354,7 +354,7 @@ export default function StockWatchPage() {
     }}
     style={miniButtonStyle}
   >
-    開
+    🔗
   </button>
 
   <button
