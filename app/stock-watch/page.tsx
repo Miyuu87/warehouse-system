@@ -37,7 +37,8 @@ export default function StockWatchPage() {
   const [sortType, setSortType] = useState<SortType>('pinned')
   const [searchText, setSearchText] = useState('')
 const [stockFilter, setStockFilter] = useState<'all' | 'zero_only' | 'hide_zero'>('all')
-
+const [bulkText, setBulkText] = useState('')
+const [showBulkForm, setShowBulkForm] = useState(false)
   const [parentSku, setParentSku] = useState('')
   const [registeredBy, setRegisteredBy] = useState('Miyuu')
   const [comment, setComment] = useState('')
@@ -126,6 +127,39 @@ const [stockFilter, setStockFilter] = useState<'all' | 'zero_only' | 'hide_zero'
       alert('SKUを入力してください')
       return
     }
+    async function addBulkItems() {
+  const skus = bulkText
+    .split('\n')
+    .map((sku) => sku.trim())
+    .filter(Boolean)
+
+  if (skus.length === 0) {
+    alert('SKUを入力してください')
+    return
+  }
+
+  const rows = skus.map((sku) => ({
+    parent_sku: sku,
+    registered_by: registeredBy.trim() || '未入力',
+    comment: comment.trim(),
+    pinned: false,
+    product_url: '',
+    image_url: '',
+  }))
+
+  const { error } = await supabase
+    .from('stock_watch_items')
+    .insert(rows)
+
+  if (error) {
+    alert('一括登録エラー: ' + error.message)
+    return
+  }
+
+  setBulkText('')
+  setShowBulkForm(false)
+  fetchItems()
+}
 
     const { error } = await supabase.from('stock_watch_items').insert({
       parent_sku: sku,
@@ -351,10 +385,42 @@ const [stockFilter, setStockFilter] = useState<'all' | 'zero_only' | 'hide_zero'
           />
           ピン留め
         </label>
+        <button
+  onClick={() => setShowBulkForm(!showBulkForm)}
+  style={subButtonStyle}
+>
+  一括登録
+</button>
 
         <button onClick={addItem} style={addButtonStyle}>
           追加
         </button>
+        {showBulkForm && (
+  <section style={bulkStyle}>
+    <label style={labelStyle}>
+      SKU一括登録
+      <textarea
+        value={bulkText}
+        onChange={(e) => setBulkText(e.target.value)}
+        placeholder={`CT7000BK\nCT7541BK\nCT7835`}
+        style={textareaStyle}
+      />
+    </label>
+
+    <div style={{ display: 'flex', gap: 12 }}>
+      <button onClick={addBulkItems} style={addButtonStyle}>
+        一括登録する
+      </button>
+
+      <button
+        onClick={() => setShowBulkForm(false)}
+        style={subButtonStyle}
+      >
+        閉じる
+      </button>
+    </div>
+  </section>
+)}
       </section>
 
       <div style={gridStyle}>
@@ -636,7 +702,7 @@ const formStyle: React.CSSProperties = {
   marginBottom: 24,
   boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr 2fr auto auto',
+  gridTemplateColumns: '1fr 1fr 2fr auto auto auto',
   gap: 12,
   alignItems: 'end',
 }
@@ -927,4 +993,35 @@ const filterStyle: React.CSSProperties = {
   gridTemplateColumns: '2fr 1fr',
   gap: 12,
   alignItems: 'end',
+}
+const subButtonStyle: React.CSSProperties = {
+  height: 48,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  background: '#fff',
+  color: '#111',
+  fontWeight: 800,
+  padding: '0 20px',
+  cursor: 'pointer',
+}
+
+const bulkStyle: React.CSSProperties = {
+  background: '#fff',
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 24,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+  display: 'grid',
+  gap: 12,
+}
+
+const textareaStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 160,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  padding: 12,
+  fontSize: 16,
+  background: '#fff',
+  boxSizing: 'border-box',
 }
