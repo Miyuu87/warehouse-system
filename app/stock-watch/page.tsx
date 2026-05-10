@@ -182,25 +182,6 @@ async function addBulkItems() {
   fetchItems()
 }
 
-    const { error } = await supabase.from('stock_watch_items').insert({
-      parent_sku: sku,
-      registered_by: registeredBy.trim() || '未入力',
-      comment: comment.trim(),
-      pinned,
-      product_url: '',
-      image_url: '',
-    })
-
-    if (error) {
-      alert('登録エラー: ' + error.message)
-      return
-    }
-
-    setParentSku('')
-    setComment('')
-    setPinned(false)
-    fetchItems()
-  }
 
   async function updateItem(item: WatchItem) {
     const { error } = await supabase
