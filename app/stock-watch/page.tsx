@@ -539,18 +539,22 @@ async function addBulkItems() {
   🌐
 </button>
 
-  <button
-    onClick={() => {
-      const url = getProductUrl(item)
-      if (url) {
-        navigator.clipboard.writeText(url)
-        alert('URLコピーしました')
-      }
-    }}
-    style={miniButtonStyle}
-  >
-    🔗
-  </button>
+ <button
+  onClick={() => {
+    const url = getProductUrl(item)
+
+    if (!url) {
+      alert('商品URLを取得できませんでした')
+      return
+    }
+
+    navigator.clipboard.writeText(url)
+    alert('URLコピーしました')
+  }}
+  style={miniButtonStyle}
+>
+  🔗
+</button>
 
   <button
     onClick={() => deleteItem(item.id)}
