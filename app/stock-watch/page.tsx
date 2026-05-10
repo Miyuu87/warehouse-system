@@ -122,30 +122,21 @@ const [showBulkForm, setShowBulkForm] = useState(false)
 
   async function addItem() {
   const sku = parentSku.trim()
-const exists = items.some(
-  (item) =>
-    item.parent_sku.toLowerCase() ===
-    sku.toLowerCase()
-)
 
-if (exists) {
-  alert('このSKUは既に登録されています')
-  return
-}
-    
   if (!sku) {
     alert('SKUを入力してください')
     return
   }
-    const exists = items.some(
-  (item) =>
-    item.parent_sku.toLowerCase() === sku.toLowerCase()
-)
 
-if (exists) {
-  alert(`このSKUは既に登録されています。\n\n${sku}`)
-  return
-}
+  const exists = items.some(
+    (item) =>
+      item.parent_sku.toLowerCase() === sku.toLowerCase()
+  )
+
+  if (exists) {
+    alert(`このSKUは既に登録されています。\n\n${sku}`)
+    return
+  }
 
   const { error } = await supabase.from('stock_watch_items').insert({
     parent_sku: sku,
@@ -702,17 +693,50 @@ async function addBulkItems() {
             </div>
 
             <div style={modalButtonRowStyle}>
-              <button onClick={() => updateItem(selectedItem)} style={detailButtonStyle}>
-                保存
-              </button>
+  <button onClick={() => updateItem(selectedItem)} style={detailButtonStyle}>
+    保存
+  </button>
 
-              <button
-                onClick={() => deleteItem(selectedItem.id)}
-                style={modalDeleteButtonStyle}
-              >
-                削除
-              </button>
-            </div>
+  <button
+    onClick={() => {
+      const url = getProductUrl(selectedItem)
+
+      if (!url) {
+        alert('商品URLを取得できませんでした')
+        return
+      }
+
+      window.open(url, '_blank')
+    }}
+    style={detailButtonStyle}
+  >
+    商品ページを開く
+  </button>
+
+  <button
+    onClick={() => {
+      const url = getProductUrl(selectedItem)
+
+      if (!url) {
+        alert('商品URLを取得できませんでした')
+        return
+      }
+
+      navigator.clipboard.writeText(url)
+      alert('URLコピーしました')
+    }}
+    style={detailButtonStyle}
+  >
+    URLコピー
+  </button>
+
+  <button
+    onClick={() => deleteItem(selectedItem.id)}
+    style={modalDeleteButtonStyle}
+  >
+    削除
+  </button>
+</div>
           </div>
         </div>
       )}
