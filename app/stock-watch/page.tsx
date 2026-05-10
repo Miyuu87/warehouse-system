@@ -122,7 +122,17 @@ const [showBulkForm, setShowBulkForm] = useState(false)
 
   async function addItem() {
   const sku = parentSku.trim()
+const exists = items.some(
+  (item) =>
+    item.parent_sku.toLowerCase() ===
+    sku.toLowerCase()
+)
 
+if (exists) {
+  alert('このSKUは既に登録されています')
+  return
+}
+    
   if (!sku) {
     alert('SKUを入力してください')
     return
@@ -159,7 +169,26 @@ async function addBulkItems() {
     return
   }
 
-  const rows = skus.map((sku) => ({
+  const existingSkus = items.map((item) =>
+    item.parent_sku.toLowerCase()
+  )
+
+  const duplicateSkus = skus.filter((sku) =>
+    existingSkus.includes(sku.toLowerCase())
+  )
+
+  const uniqueSkus = skus.filter(
+    (sku) => !existingSkus.includes(sku.toLowerCase())
+  )
+
+  if (uniqueSkus.length === 0) {
+    alert(
+      `すべて登録済みSKUです。\n\n重複SKU:\n${duplicateSkus.join('\n')}`
+    )
+    return
+  }
+
+  const rows = uniqueSkus.map((sku) => ({
     parent_sku: sku,
     registered_by: registeredBy.trim() || '未入力',
     comment: comment.trim(),
@@ -180,6 +209,14 @@ async function addBulkItems() {
   setBulkText('')
   setShowBulkForm(false)
   fetchItems()
+
+  if (duplicateSkus.length > 0) {
+    alert(
+      `一括登録しました。\n\n登録件数: ${uniqueSkus.length}件\n\n重複のため登録しませんでした:\n${duplicateSkus.join('\n')}`
+    )
+  } else {
+    alert(`一括登録しました。\n\n登録件数: ${uniqueSkus.length}件`)
+  }
 }
 
 
