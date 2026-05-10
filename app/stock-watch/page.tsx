@@ -29,6 +29,7 @@ type ProductData = {
 }
 
 type SortType = 'pinned' | 'stock_asc' | 'stock_desc' | 'newest'
+type StockFilter = 'all' | 'zero_only' | 'hide_zero'
 
 export default function StockWatchPage() {
   const [items, setItems] = useState<WatchItem[]>([])
@@ -36,9 +37,10 @@ export default function StockWatchPage() {
   const [productMap, setProductMap] = useState<Record<string, ProductData[]>>({})
   const [sortType, setSortType] = useState<SortType>('pinned')
   const [searchText, setSearchText] = useState('')
-const [stockFilter, setStockFilter] = useState<'all' | 'zero_only' | 'hide_zero'>('all')
-const [bulkText, setBulkText] = useState('')
-const [showBulkForm, setShowBulkForm] = useState(false)
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all')
+  const [bulkText, setBulkText] = useState('')
+  const [showBulkForm, setShowBulkForm] = useState(false)
+
   const [parentSku, setParentSku] = useState('')
   const [registeredBy, setRegisteredBy] = useState('Miyuu')
   const [comment, setComment] = useState('')
@@ -121,104 +123,96 @@ const [showBulkForm, setShowBulkForm] = useState(false)
   }
 
   async function addItem() {
-  const sku = parentSku.trim()
+    const sku = parentSku.trim()
 
-  if (!sku) {
-    alert('SKUを入力してください')
-    return
-  }
+    if (!sku) {
+      alert('SKUを入力してください')
+      return
+    }
 
-  const exists = items.some(
-    (item) =>
-      item.parent_sku.toLowerCase() === sku.toLowerCase()
-  )
-
-  if (exists) {
-    alert(`このSKUは既に登録されています。\n\n${sku}`)
-    return
-  }
-
-  const { error } = await supabase.from('stock_watch_items').insert({
-    parent_sku: sku,
-    registered_by: registeredBy.trim() || '未入力',
-    comment: comment.trim(),
-    pinned,
-    product_url: '',
-    image_url: '',
-  })
-
-  if (error) {
-    alert('登録エラー: ' + error.message)
-    return
-  }
-
-  setParentSku('')
-  setComment('')
-  setPinned(false)
-  fetchItems()
-}
-
-async function addBulkItems() {
-  const skus = bulkText
-    .split('\n')
-    .map((sku) => sku.trim())
-    .filter(Boolean)
-
-  if (skus.length === 0) {
-    alert('SKUを入力してください')
-    return
-  }
-
-  const existingSkus = items.map((item) =>
-    item.parent_sku.toLowerCase()
-  )
-
-  const duplicateSkus = skus.filter((sku) =>
-    existingSkus.includes(sku.toLowerCase())
-  )
-
-  const uniqueSkus = skus.filter(
-    (sku) => !existingSkus.includes(sku.toLowerCase())
-  )
-
-  if (uniqueSkus.length === 0) {
-    alert(
-      `すべて登録済みSKUです。\n\n重複SKU:\n${duplicateSkus.join('\n')}`
+    const exists = items.some(
+      (item) => item.parent_sku.toLowerCase() === sku.toLowerCase()
     )
-    return
+
+    if (exists) {
+      alert(`このSKUは既に登録されています。\n\n${sku}`)
+      return
+    }
+
+    const { error } = await supabase.from('stock_watch_items').insert({
+      parent_sku: sku,
+      registered_by: registeredBy.trim() || '未入力',
+      comment: comment.trim(),
+      pinned,
+      product_url: '',
+      image_url: '',
+    })
+
+    if (error) {
+      alert('登録エラー: ' + error.message)
+      return
+    }
+
+    setParentSku('')
+    setComment('')
+    setPinned(false)
+    fetchItems()
   }
 
-  const rows = uniqueSkus.map((sku) => ({
-    parent_sku: sku,
-    registered_by: registeredBy.trim() || '未入力',
-    comment: comment.trim(),
-    pinned: false,
-    product_url: '',
-    image_url: '',
-  }))
+  async function addBulkItems() {
+    const skus = bulkText
+      .split('\n')
+      .map((sku) => sku.trim())
+      .filter(Boolean)
 
-  const { error } = await supabase
-    .from('stock_watch_items')
-    .insert(rows)
+    if (skus.length === 0) {
+      alert('SKUを入力してください')
+      return
+    }
 
-  if (error) {
-    alert('一括登録エラー: ' + error.message)
-    return
-  }
+    const existingSkus = items.map((item) => item.parent_sku.toLowerCase())
 
-  setBulkText('')
-  setShowBulkForm(false)
-  fetchItems()
-
-  if (duplicateSkus.length > 0) {
-    alert(
-      `一括登録しました。\n\n登録件数: ${uniqueSkus.length}件\n\n重複のため登録しませんでした:\n${duplicateSkus.join('\n')}`
+    const duplicateSkus = skus.filter((sku) =>
+      existingSkus.includes(sku.toLowerCase())
     )
-  } else {
-    alert(`一括登録しました。\n\n登録件数: ${uniqueSkus.length}件`)
-  }
-}
 
+    const uniqueSkus = skus.filter(
+      (sku) => !existingSkus.includes(sku.toLowerCase())
+    )
+
+    if (uniqueSkus.length === 0) {
+      alert(`すべて登録済みSKUです。\n\n重複SKU:\n${duplicateSkus.join('\n')}`)
+      return
+    }
+
+    const rows = uniqueSkus.map((sku) => ({
+      parent_sku: sku,
+      registered_by: registeredBy.trim() || '未入力',
+      comment: comment.trim(),
+      pinned: false,
+      product_url: '',
+      image_url: '',
+    }))
+
+    const { error } = await supabase.from('stock_watch_items').insert(rows)
+
+    if (error) {
+      alert('一括登録エラー: ' + error.message)
+      return
+    }
+
+    setBulkText('')
+    setShowBulkForm(false)
+    fetchItems()
+
+    if (duplicateSkus.length > 0) {
+      alert(
+        `一括登録しました。\n\n登録件数: ${uniqueSkus.length}件\n\n重複のため登録しませんでした:\n${duplicateSkus.join('\n')}`
+      )
+    } else {
+      alert(`一括登録しました。\n\n登録件数: ${uniqueSkus.length}件`)
+    }
+  }
 
   async function updateItem(item: WatchItem) {
     const { error } = await supabase
@@ -273,70 +267,63 @@ async function addBulkItems() {
   function getMainName(item: WatchItem) {
     return getProductRows(item)[0]?.product_name || item.parent_sku
   }
+
   function getProductUrl(item: WatchItem) {
-  const rows = getProductRows(item)
+    const rows = getProductRows(item)
+    const productId = rows[0]?.product_id
 
-  if (!rows.length) return ''
+    if (!productId) return ''
 
-  const productId = rows[0]?.product_id
-
-  if (!productId) return ''
-
-  return `https://noiseandkisses.com/?pid=${productId}`
-}
+    return `https://noiseandkisses.com/?pid=${productId}`
+  }
 
   const sortedItems = useMemo(() => {
-  const keyword = searchText.trim().toLowerCase()
+    const keyword = searchText.trim().toLowerCase()
 
-  let filtered = items.filter((item) => {
-    const rows = getProductRows(item)
-    const totalStock = getTotalStock(item)
-    const name = getMainName(item).toLowerCase()
-    const sku = item.parent_sku.toLowerCase()
+    const filtered = items.filter((item) => {
+      const rows = getProductRows(item)
+      const totalStock = getTotalStock(item)
+      const name = getMainName(item).toLowerCase()
+      const sku = item.parent_sku.toLowerCase()
 
-    const matchesSearch =
-      !keyword ||
-      name.includes(keyword) ||
-      sku.includes(keyword) ||
-      rows.some((row) => row.sku.toLowerCase().includes(keyword))
+      const matchesSearch =
+        !keyword ||
+        name.includes(keyword) ||
+        sku.includes(keyword) ||
+        rows.some((row) => row.sku.toLowerCase().includes(keyword))
 
-    const matchesStock =
-      stockFilter === 'all' ||
-      (stockFilter === 'zero_only' && rows.length > 0 && totalStock === 0) ||
-      (stockFilter === 'hide_zero' && !(rows.length > 0 && totalStock === 0))
+      const matchesStock =
+        stockFilter === 'all' ||
+        (stockFilter === 'zero_only' && rows.length > 0 && totalStock === 0) ||
+        (stockFilter === 'hide_zero' && !(rows.length > 0 && totalStock === 0))
 
-    return matchesSearch && matchesStock
-  })
+      return matchesSearch && matchesStock
+    })
 
-  return filtered.sort((a, b) => {
-    const stockA = getTotalStock(a)
-    const stockB = getTotalStock(b)
+    return filtered.sort((a, b) => {
+      const stockA = getTotalStock(a)
+      const stockB = getTotalStock(b)
 
-    if (sortType === 'pinned') {
-      if (Number(b.pinned) !== Number(a.pinned)) {
-        return Number(b.pinned) - Number(a.pinned)
+      if (sortType === 'pinned') {
+        if (Number(b.pinned) !== Number(a.pinned)) {
+          return Number(b.pinned) - Number(a.pinned)
+        }
+
+        return (
+          new Date(b.created_at || '').getTime() -
+          new Date(a.created_at || '').getTime()
+        )
       }
+
+      if (sortType === 'stock_asc') return stockA - stockB
+      if (sortType === 'stock_desc') return stockB - stockA
 
       return (
         new Date(b.created_at || '').getTime() -
         new Date(a.created_at || '').getTime()
       )
-    }
-
-    if (sortType === 'stock_asc') {
-      return stockA - stockB
-    }
-
-    if (sortType === 'stock_desc') {
-      return stockB - stockA
-    }
-
-    return (
-      new Date(b.created_at || '').getTime() -
-      new Date(a.created_at || '').getTime()
-    )
-  })
-}, [items, productMap, sortType, searchText, stockFilter])
+    })
+  }, [items, productMap, sortType, searchText, stockFilter])
 
   return (
     <main style={pageStyle}>
@@ -358,33 +345,31 @@ async function addBulkItems() {
         </label>
       </div>
 
-<section style={filterStyle}>
-  <label style={labelStyle}>
-    検索
-    <input
-      value={searchText}
-      onChange={(e) => setSearchText(e.target.value)}
-      placeholder="商品名 / SKUで検索"
-      style={inputStyle}
-    />
-  </label>
+      <section style={filterStyle}>
+        <label style={labelStyle}>
+          検索
+          <input
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="商品名 / SKUで検索"
+            style={inputStyle}
+          />
+        </label>
 
-  <label style={labelStyle}>
-    在庫表示
-    <select
-      value={stockFilter}
-      onChange={(e) =>
-        setStockFilter(e.target.value as 'all' | 'zero_only' | 'hide_zero')
-      }
-      style={inputStyle}
-    >
-      <option value="all">すべて表示</option>
-      <option value="zero_only">在庫0だけ表示</option>
-      <option value="hide_zero">在庫0を非表示</option>
-    </select>
-  </label>
-</section>
-      
+        <label style={labelStyle}>
+          在庫表示
+          <select
+            value={stockFilter}
+            onChange={(e) => setStockFilter(e.target.value as StockFilter)}
+            style={inputStyle}
+          >
+            <option value="all">すべて表示</option>
+            <option value="zero_only">在庫0だけ表示</option>
+            <option value="hide_zero">在庫0を非表示</option>
+          </select>
+        </label>
+      </section>
+
       <section style={formStyle}>
         <label style={labelStyle}>
           親SKU
@@ -406,7 +391,7 @@ async function addBulkItems() {
           />
         </label>
 
-        <label style={{ ...labelStyle, gridColumn: 'span 2' }}>
+        <label style={labelStyle}>
           コメント
           <input
             value={comment}
@@ -424,43 +409,42 @@ async function addBulkItems() {
           />
           ピン留め
         </label>
+
         <button
-  onClick={() => setShowBulkForm(!showBulkForm)}
-  style={subButtonStyle}
->
-  一括登録
-</button>
+          onClick={() => setShowBulkForm(!showBulkForm)}
+          style={subButtonStyle}
+        >
+          一括登録
+        </button>
 
         <button onClick={addItem} style={addButtonStyle}>
           追加
         </button>
-        {showBulkForm && (
-  <section style={bulkStyle}>
-    <label style={labelStyle}>
-      SKU一括登録
-      <textarea
-        value={bulkText}
-        onChange={(e) => setBulkText(e.target.value)}
-        placeholder={`CT7000BK\nCT7541BK\nCT7835`}
-        style={textareaStyle}
-      />
-    </label>
-
-    <div style={{ display: 'flex', gap: 12 }}>
-      <button onClick={addBulkItems} style={addButtonStyle}>
-        一括登録する
-      </button>
-
-      <button
-        onClick={() => setShowBulkForm(false)}
-        style={subButtonStyle}
-      >
-        閉じる
-      </button>
-    </div>
-  </section>
-)}
       </section>
+
+      {showBulkForm && (
+        <section style={bulkStyle}>
+          <label style={labelStyle}>
+            SKU一括登録
+            <textarea
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={`CT7000BK\nCT7541BK\nCT7835`}
+              style={textareaStyle}
+            />
+          </label>
+
+          <div style={bulkButtonRowStyle}>
+            <button onClick={addBulkItems} style={addButtonStyle}>
+              一括登録する
+            </button>
+
+            <button onClick={() => setShowBulkForm(false)} style={subButtonStyle}>
+              閉じる
+            </button>
+          </div>
+        </section>
+      )}
 
       <div style={gridStyle}>
         {sortedItems.map((item) => {
@@ -473,12 +457,9 @@ async function addBulkItems() {
           return (
             <div key={item.id} style={cardStyle}>
               <div
-  style={{
-    ...imageBoxStyle,
-    cursor: 'pointer',
-  }}
-  onClick={() => setSelectedItem(item)}
->
+                style={{ ...imageBoxStyle, cursor: 'pointer' }}
+                onClick={() => setSelectedItem(item)}
+              >
                 {mainImage ? (
                   <img src={mainImage} alt={item.parent_sku} style={imageStyle} />
                 ) : (
@@ -486,11 +467,7 @@ async function addBulkItems() {
                 )}
 
                 {isSoldOut && <div style={soldOutOverlayStyle}>完売</div>}
-
-                {isLowStock && !isSoldOut && (
-                  <div style={stockBadgeStyle}>残り1点</div>
-                )}
-
+                {isLowStock && !isSoldOut && <div style={stockBadgeStyle}>残り1点</div>}
                 {item.pinned && <div style={pinStyle}>📌</div>}
               </div>
 
@@ -507,53 +484,43 @@ async function addBulkItems() {
                 </p>
 
                 <div style={buttonRowStyle}>
-  <button
-    onClick={() => setSelectedItem(item)}
-    style={detailButtonStyle}
-  >
-    詳細
-  </button>
+                  <button onClick={() => setSelectedItem(item)} style={detailButtonStyle}>
+                    詳細
+                  </button>
 
-  <button
-  onClick={() => {
-    const url = getProductUrl(item)
+                  <button
+                    onClick={() => {
+                      const url = getProductUrl(item)
+                      if (!url) {
+                        alert('商品URLを取得できませんでした')
+                        return
+                      }
+                      window.open(url, '_blank')
+                    }}
+                    style={miniButtonStyle}
+                  >
+                    🌐
+                  </button>
 
-    if (!url) {
-      alert('商品URLを取得できませんでした')
-      return
-    }
+                  <button
+                    onClick={() => {
+                      const url = getProductUrl(item)
+                      if (!url) {
+                        alert('商品URLを取得できませんでした')
+                        return
+                      }
+                      navigator.clipboard.writeText(url)
+                      alert('URLコピーしました')
+                    }}
+                    style={miniButtonStyle}
+                  >
+                    🔗
+                  </button>
 
-    window.open(url, '_blank')
-  }}
-  style={miniButtonStyle}
->
-  🌐
-</button>
-
- <button
-  onClick={() => {
-    const url = getProductUrl(item)
-
-    if (!url) {
-      alert('商品URLを取得できませんでした')
-      return
-    }
-
-    navigator.clipboard.writeText(url)
-    alert('URLコピーしました')
-  }}
-  style={miniButtonStyle}
->
-  🔗
-</button>
-
-  <button
-    onClick={() => deleteItem(item.id)}
-    style={deleteButtonStyle}
-  >
-    ×
-  </button>
-</div>
+                  <button onClick={() => deleteItem(item.id)} style={deleteButtonStyle}>
+                    ×
+                  </button>
+                </div>
               </div>
             </div>
           )
@@ -693,50 +660,46 @@ async function addBulkItems() {
             </div>
 
             <div style={modalButtonRowStyle}>
-  <button onClick={() => updateItem(selectedItem)} style={detailButtonStyle}>
-    保存
-  </button>
+              <button onClick={() => updateItem(selectedItem)} style={detailButtonStyle}>
+                保存
+              </button>
 
-  <button
-    onClick={() => {
-      const url = getProductUrl(selectedItem)
+              <button
+                onClick={() => {
+                  const url = getProductUrl(selectedItem)
+                  if (!url) {
+                    alert('商品URLを取得できませんでした')
+                    return
+                  }
+                  window.open(url, '_blank')
+                }}
+                style={detailButtonStyle}
+              >
+                商品ページを開く
+              </button>
 
-      if (!url) {
-        alert('商品URLを取得できませんでした')
-        return
-      }
+              <button
+                onClick={() => {
+                  const url = getProductUrl(selectedItem)
+                  if (!url) {
+                    alert('商品URLを取得できませんでした')
+                    return
+                  }
+                  navigator.clipboard.writeText(url)
+                  alert('URLコピーしました')
+                }}
+                style={detailButtonStyle}
+              >
+                URLコピー
+              </button>
 
-      window.open(url, '_blank')
-    }}
-    style={detailButtonStyle}
-  >
-    商品ページを開く
-  </button>
-
-  <button
-    onClick={() => {
-      const url = getProductUrl(selectedItem)
-
-      if (!url) {
-        alert('商品URLを取得できませんでした')
-        return
-      }
-
-      navigator.clipboard.writeText(url)
-      alert('URLコピーしました')
-    }}
-    style={detailButtonStyle}
-  >
-    URLコピー
-  </button>
-
-  <button
-    onClick={() => deleteItem(selectedItem.id)}
-    style={modalDeleteButtonStyle}
-  >
-    削除
-  </button>
-</div>
+              <button
+                onClick={() => deleteItem(selectedItem.id)}
+                style={modalDeleteButtonStyle}
+              >
+                削除
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -745,7 +708,7 @@ async function addBulkItems() {
 }
 
 const pageStyle: React.CSSProperties = {
-  padding: 24,
+  padding: 16,
   background: '#f5f5f5',
   minHeight: '100vh',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
@@ -757,10 +720,11 @@ const headerRowStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 16,
   marginBottom: 20,
+  flexWrap: 'wrap',
 }
 
 const titleStyle: React.CSSProperties = {
-  fontSize: 32,
+  fontSize: 'clamp(24px, 5vw, 32px)',
   fontWeight: 800,
   margin: 0,
 }
@@ -770,6 +734,7 @@ const sortLabelStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   fontWeight: 700,
+  flexWrap: 'wrap',
 }
 
 const sortSelectStyle: React.CSSProperties = {
@@ -788,7 +753,19 @@ const formStyle: React.CSSProperties = {
   marginBottom: 24,
   boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr 2fr auto auto auto',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: 12,
+  alignItems: 'end',
+}
+
+const filterStyle: React.CSSProperties = {
+  background: '#fff',
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 16,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: 12,
   alignItems: 'end',
 }
@@ -826,13 +803,51 @@ const addButtonStyle: React.CSSProperties = {
   background: '#111',
   color: '#fff',
   fontWeight: 800,
-  padding: '0 24px',
+  padding: '0 20px',
   cursor: 'pointer',
+}
+
+const subButtonStyle: React.CSSProperties = {
+  height: 48,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  background: '#fff',
+  color: '#111',
+  fontWeight: 800,
+  padding: '0 20px',
+  cursor: 'pointer',
+}
+
+const bulkStyle: React.CSSProperties = {
+  background: '#fff',
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 24,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+  display: 'grid',
+  gap: 12,
+}
+
+const bulkButtonRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 12,
+  flexWrap: 'wrap',
+}
+
+const textareaStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 160,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  padding: 12,
+  fontSize: 16,
+  background: '#fff',
+  boxSizing: 'border-box',
 }
 
 const gridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
   gap: 20,
 }
 
@@ -908,7 +923,7 @@ const pinStyle: React.CSSProperties = {
 }
 
 const cardTitleStyle: React.CSSProperties = {
-  fontSize: 22,
+  fontSize: 20,
   fontWeight: 800,
   marginBottom: 8,
 }
@@ -943,6 +958,7 @@ const buttonRowStyle: React.CSSProperties = {
 
 const detailButtonStyle: React.CSSProperties = {
   flex: 1,
+  minWidth: 92,
   padding: 12,
   borderRadius: 12,
   border: 'none',
@@ -954,8 +970,19 @@ const detailButtonStyle: React.CSSProperties = {
   textDecoration: 'none',
 }
 
+const miniButtonStyle: React.CSSProperties = {
+  width: 48,
+  minWidth: 48,
+  borderRadius: 12,
+  border: '1px solid #ddd',
+  background: '#fff',
+  cursor: 'pointer',
+  fontWeight: 800,
+}
+
 const deleteButtonStyle: React.CSSProperties = {
   width: 48,
+  minWidth: 48,
   borderRadius: 12,
   border: '1px solid #ddd',
   background: '#fff',
@@ -971,7 +998,7 @@ const modalOverlayStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: 20,
+  padding: 12,
   zIndex: 1000,
 }
 
@@ -982,18 +1009,19 @@ const modalStyle: React.CSSProperties = {
   overflow: 'auto',
   background: '#fff',
   borderRadius: 24,
-  padding: 24,
+  padding: 20,
 }
 
 const modalHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
+  gap: 12,
   marginBottom: 16,
 }
 
 const modalTitleStyle: React.CSSProperties = {
-  fontSize: 28,
+  fontSize: 'clamp(20px, 5vw, 28px)',
   fontWeight: 800,
 }
 
@@ -1016,7 +1044,7 @@ const modalImageBoxStyle: React.CSSProperties = {
 
 const modalGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: 12,
 }
 
@@ -1036,6 +1064,7 @@ const stockRowStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
+  gap: 12,
   padding: 12,
   border: '1px solid #eee',
   borderRadius: 12,
@@ -1054,61 +1083,11 @@ const modalButtonRowStyle: React.CSSProperties = {
 }
 
 const modalDeleteButtonStyle: React.CSSProperties = {
-  width: 120,
+  minWidth: 120,
   padding: 12,
   borderRadius: 12,
   border: '1px solid #ddd',
   background: '#fff',
   cursor: 'pointer',
   fontWeight: 800,
-}
-const miniButtonStyle: React.CSSProperties = {
-  width: 54,
-  borderRadius: 12,
-  border: '1px solid #ddd',
-  background: '#fff',
-  cursor: 'pointer',
-  fontWeight: 800,
-}
-const filterStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 18,
-  padding: 18,
-  marginBottom: 16,
-  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-  display: 'grid',
-  gridTemplateColumns: '2fr 1fr',
-  gap: 12,
-  alignItems: 'end',
-}
-const subButtonStyle: React.CSSProperties = {
-  height: 48,
-  borderRadius: 12,
-  border: '1px solid #ddd',
-  background: '#fff',
-  color: '#111',
-  fontWeight: 800,
-  padding: '0 20px',
-  cursor: 'pointer',
-}
-
-const bulkStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 18,
-  padding: 18,
-  marginBottom: 24,
-  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-  display: 'grid',
-  gap: 12,
-}
-
-const textareaStyle: React.CSSProperties = {
-  width: '100%',
-  minHeight: 160,
-  borderRadius: 12,
-  border: '1px solid #ddd',
-  padding: 12,
-  fontSize: 16,
-  background: '#fff',
-  boxSizing: 'border-box',
 }
