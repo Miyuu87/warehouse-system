@@ -137,6 +137,15 @@ if (exists) {
     alert('SKUを入力してください')
     return
   }
+    const exists = items.some(
+  (item) =>
+    item.parent_sku.toLowerCase() === sku.toLowerCase()
+)
+
+if (exists) {
+  alert(`このSKUは既に登録されています。\n\n${sku}`)
+  return
+}
 
   const { error } = await supabase.from('stock_watch_items').insert({
     parent_sku: sku,
