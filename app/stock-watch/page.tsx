@@ -121,13 +121,34 @@ const [showBulkForm, setShowBulkForm] = useState(false)
   }
 
   async function addItem() {
-    const sku = parentSku.trim()
+  const sku = parentSku.trim()
 
-    if (!sku) {
-      alert('SKUを入力してください')
-      return
-    }
-    async function addBulkItems() {
+  if (!sku) {
+    alert('SKUを入力してください')
+    return
+  }
+
+  const { error } = await supabase.from('stock_watch_items').insert({
+    parent_sku: sku,
+    registered_by: registeredBy.trim() || '未入力',
+    comment: comment.trim(),
+    pinned,
+    product_url: '',
+    image_url: '',
+  })
+
+  if (error) {
+    alert('登録エラー: ' + error.message)
+    return
+  }
+
+  setParentSku('')
+  setComment('')
+  setPinned(false)
+  fetchItems()
+}
+
+async function addBulkItems() {
   const skus = bulkText
     .split('\n')
     .map((sku) => sku.trim())
@@ -433,7 +454,13 @@ const [showBulkForm, setShowBulkForm] = useState(false)
 
           return (
             <div key={item.id} style={cardStyle}>
-              <div style={imageBoxStyle}>
+              <div
+  style={{
+    ...imageBoxStyle,
+    cursor: 'pointer',
+  }}
+  onClick={() => setSelectedItem(item)}
+>
                 {mainImage ? (
                   <img src={mainImage} alt={item.parent_sku} style={imageStyle} />
                 ) : (
