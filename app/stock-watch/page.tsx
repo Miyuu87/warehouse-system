@@ -1050,6 +1050,7 @@ const modalButtonRowStyle: React.CSSProperties = {
   display: 'flex',
   gap: 12,
   marginTop: 20,
+  flexWrap: 'wrap',
 }
 
 const modalDeleteButtonStyle: React.CSSProperties = {
