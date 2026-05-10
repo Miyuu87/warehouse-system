@@ -524,16 +524,20 @@ async function addBulkItems() {
   </button>
 
   <button
-    onClick={() => {
-      const url = getProductUrl(item)
-      if (url) {
-        window.open(url, '_blank')
-      }
-    }}
-    style={miniButtonStyle}
-  >
-    🌐
-  </button>
+  onClick={() => {
+    const url = getProductUrl(item)
+
+    if (!url) {
+      alert('商品URLを取得できませんでした')
+      return
+    }
+
+    window.open(url, '_blank')
+  }}
+  style={miniButtonStyle}
+>
+  🌐
+</button>
 
   <button
     onClick={() => {
