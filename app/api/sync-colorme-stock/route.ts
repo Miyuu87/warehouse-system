@@ -184,21 +184,16 @@ export async function GET(req: NextRequest) {
     // -----------------------------
     // 自動巡回
     // -----------------------------
-    if (auto && products.length === limit) {
-      const nextUrl =
-        `${req.nextUrl.origin}` +
-        `/api/sync-colorme-stock` +
-        `?offset=${offset + limit}` +
-        `&limit=${limit}` +
-        `&auto=1`
-
-      return NextResponse.redirect(nextUrl)
-    }
+    
 
     // -----------------------------
     // 完了
     // -----------------------------
     return NextResponse.json({
+      nextUrl:
+  products.length === limit
+    ? `${req.nextUrl.origin}/api/sync-colorme-stock?offset=${offset + limit}&limit=${limit}`
+    : null,
       ok: true,
       offset,
       limit,
