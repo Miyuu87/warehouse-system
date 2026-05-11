@@ -1064,14 +1064,18 @@ const soldOutOverlayStyle: React.CSSProperties = {
 
 const stockBadgeStyle: React.CSSProperties = {
   position: 'absolute',
-  top: 12,
-  left: 12,
-  background: '#ff3b30',
+  top: 10,
+  left: 10,
+  background: '#ff2d2d',
   color: '#fff',
-  padding: '6px 10px',
+  padding: '8px 12px',
   borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 800,
+  fontSize: 13,
+  fontWeight: 900,
+  lineHeight: 1,
+  boxShadow: '0 4px 12px rgba(255,45,45,0.45)',
+  border: '2px solid #fff',
+  zIndex: 4,
 }
 
 const pinStyle: React.CSSProperties = {
