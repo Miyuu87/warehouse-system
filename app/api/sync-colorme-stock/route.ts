@@ -153,16 +153,11 @@ export async function GET(req: NextRequest) {
       // -----------------------------
       // stock更新
       // -----------------------------
-      await supabase
-        .from('stock_by_location')
-        .delete()
-        .eq('location_code', LOCATION_CODE)
-        .in('sku', skus)
-
-      const { error: stockInsertError } =
-        await supabase
-          .from('stock_by_location')
-          .insert(stockRows)
+      const { error: productInsertError } = await supabase
+  .from('products')
+  .upsert(productRows, {
+    onConflict: 'sku',
+  })
 
       if (stockInsertError) {
         throw new Error(stockInsertError.message)
