@@ -310,6 +310,26 @@ export default function StockWatchPage() {
     return `https://noiseandkisses.com/?pid=${productId}`
   }
 
+  async function snapshotStock() {
+  const ok = confirm('現在の在庫を履歴として保存しますか？')
+  if (!ok) return
+
+  const res = await fetch('/api/snapshot-stock', {
+    method: 'POST',
+  })
+
+  const json = await res.json()
+
+  if (!res.ok) {
+    alert('履歴保存エラー: ' + json.error)
+    return
+  }
+
+  alert(`履歴を保存しました。\n保存件数: ${json.count}件`)
+
+  fetchStockChanges()
+}
+
   const sortedItems = useMemo(() => {
     const keyword = searchText.trim().toLowerCase()
 
@@ -365,7 +385,9 @@ export default function StockWatchPage() {
     <main style={pageStyle}>
       <div style={headerRowStyle}>
         <h1 style={titleStyle}>在庫注視アイテム</h1>
-
+<button onClick={snapshotStock} style={subButtonStyle}>
+  履歴保存
+</button>
         <label style={sortLabelStyle}>
           並び順
           <select
