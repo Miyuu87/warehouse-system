@@ -78,9 +78,9 @@ export default function StockWatchPage() {
 
   async function fetchProductData(parentSku: string) {
     const { data: products, error: productError } = await supabase
-      .from('products')
-      .select('*')
-      .ilike('sku', `${parentSku}%`)
+  .from('products')
+  .select('*')
+  .or(`sku.eq.${parentSku},sku.ilike.${parentSku}-%`)
 
     if (productError) {
       console.error(productError)
