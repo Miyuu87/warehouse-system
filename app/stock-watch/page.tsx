@@ -40,6 +40,7 @@ export default function StockWatchPage() {
   const [selectedItem, setSelectedItem] = useState<WatchItem | null>(null)
   const [productMap, setProductMap] = useState<Record<string, ProductData[]>>({})
   const [stockChanges, setStockChanges] = useState<Record<string, number>>({})
+  const [lastSnapshotAt, setLastSnapshotAt] = useState('')
   const [sortType, setSortType] = useState<SortType>('pinned')
   const [searchText, setSearchText] = useState('')
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
@@ -138,15 +139,28 @@ export default function StockWatchPage() {
     return
   }
 
+    let latestDate = ''
   const map: Record<string, number> = {}
 
   for (const row of data || []) {
+    if (
+  row.latest_recorded_at &&
+  (!latestDate ||
+    new Date(row.latest_recorded_at) > new Date(latestDate))
+) {
+  latestDate = row.latest_recorded_at
+}
     if (row.sold_count > 0) {
       map[row.sku] = row.sold_count
     }
   }
 
   setStockChanges(map)
+    if (latestDate) {
+  setLastSnapshotAt(
+    new Date(latestDate).toLocaleString('ja-JP')
+  )
+}
 }
 
   async function addItem() {
