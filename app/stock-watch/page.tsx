@@ -131,8 +131,8 @@ export default function StockWatchPage() {
   
   async function fetchStockChanges() {
   const { data, error } = await supabase
-    .from('recent_stock_changes')
-    .select('sku, sold_count')
+  .from('recent_stock_changes')
+  .select('sku, sold_count, latest_recorded_at')
 
   if (error) {
     console.error(error)
