@@ -266,28 +266,26 @@ async function updateItem(item: WatchItem) {
   const commentChanged =
     (currentItem?.comment || '') !== (item.comment || '')
 
-  const updatedItem = {
+  const updatedItem: WatchItem = {
     ...item,
     parent_sku: item.parent_sku.trim(),
     registered_by: item.registered_by.trim() || '未入力',
     comment: item.comment || '',
     comment_updated_at: commentChanged
       ? new Date().toISOString()
-      : item.comment_updated_at || currentItem?.comment_updated_at || null,
+      : item.comment_updated_at || currentItem?.comment_updated_at,
   }
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('stock_watch_items')
     .update({
       parent_sku: updatedItem.parent_sku,
       registered_by: updatedItem.registered_by,
       comment: updatedItem.comment,
-      comment_updated_at: updatedItem.comment_updated_at,
+      comment_updated_at: updatedItem.comment_updated_at || null,
       pinned: updatedItem.pinned,
     })
-        .eq('id', item.id)
-    .select('*')
-    .maybeSingle()
+    .eq('id', item.id)
 
   if (error) {
     alert('保存エラー: ' + error.message)
@@ -295,10 +293,10 @@ async function updateItem(item: WatchItem) {
   }
 
   setItems((current) =>
-    current.map((i) => (i.id === item.id ? data : i))
+    current.map((i) => (i.id === item.id ? updatedItem : i))
   )
 
-  await fetchProductData(data.parent_sku)
+  await fetchProductData(updatedItem.parent_sku)
 
   setSelectedItem(null)
 }
