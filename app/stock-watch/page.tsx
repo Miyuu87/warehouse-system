@@ -661,6 +661,11 @@ export default function StockWatchPage() {
             </div>
 
             <div style={stockListWrapStyle}>
+              {selectedItem && getRecentSoldCount(selectedItem) > 0 && (
+  <div style={recentSoldBoxStyle}>
+    🔥 最近{getRecentSoldCount(selectedItem)}点売れました
+  </div>
+)}
               <h3 style={stockListTitleStyle}>オプション別在庫</h3>
 
               {(productMap[selectedItem.parent_sku] || []).length === 0 ? (
@@ -684,6 +689,11 @@ export default function StockWatchPage() {
                         </div>
 
                         <div style={skuTextStyle}>{row.sku}</div>
+                        {stockChanges[row.sku] > 0 && (
+  <div style={recentSoldSkuStyle}>
+    🔥 最近{stockChanges[row.sku]}点売れました
+  </div>
+)}
 
                         {row.product_id && (
                           <div style={skuTextStyle}>商品番号: {row.product_id}</div>
@@ -1157,4 +1167,20 @@ const soldTextStyle: React.CSSProperties = {
   color: '#d93025',
   fontWeight: 800,
   marginBottom: 8,
+}
+const recentSoldBoxStyle: React.CSSProperties = {
+  background: '#fff1f0',
+  color: '#d93025',
+  border: '1px solid #ffd6d3',
+  borderRadius: 14,
+  padding: 12,
+  fontWeight: 900,
+  marginBottom: 16,
+}
+
+const recentSoldSkuStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#d93025',
+  fontWeight: 800,
+  marginTop: 4,
 }
