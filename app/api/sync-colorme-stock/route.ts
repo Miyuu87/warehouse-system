@@ -13,24 +13,12 @@ const LOCATION_CODE = 'COLORME'
 export async function GET(req: NextRequest) {
   try {
     const accessToken = process.env.COLORME_ACCESS_TOKEN
-
-    const offset = Number(
-      req.nextUrl.searchParams.get('offset') || 0
-    )
-
-    const limit = Number(
-      req.nextUrl.searchParams.get('limit') || 20
-    )
-
-    const auto =
-      req.nextUrl.searchParams.get('auto') === '1'
+    const offset = Number(req.nextUrl.searchParams.get('offset') || 0)
+    const limit = Number(req.nextUrl.searchParams.get('limit') || 20)
 
     if (!accessToken) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: 'COLORME_ACCESS_TOKEN is missing',
-        },
+        { ok: false, error: 'COLORME_ACCESS_TOKEN is missing' },
         { status: 500 }
       )
     }
@@ -48,43 +36,29 @@ export async function GET(req: NextRequest) {
 
     if (!res.ok) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: json,
-        },
+        { ok: false, error: json },
         { status: 500 }
       )
     }
 
     const products = json.products || []
-
     const productRows: any[] = []
     const stockRows: any[] = []
 
     for (const product of products) {
       const variants = product.variants || []
 
-      // -----------------------------
-      // variantあり
-      // -----------------------------
       if (variants.length > 0) {
         for (const variant of variants) {
           const sku = variant.model_number
-
           if (!sku) continue
 
           productRows.push({
             sku,
             product_id: String(product.id),
             product_name: product.name,
-            option_name:
-              variant.title ||
-              variant.option1_value ||
-              '',
-            image_url:
-              product.image_url ||
-              product.thumbnail_image_url ||
-              '',
+            option_name: variant.title || variant.option1_value || '',
+            image_url: product.image_url || product.thumbnail_image_url || '',
           })
 
           stockRows.push({
@@ -92,20 +66,12 @@ export async function GET(req: NextRequest) {
             location_code: LOCATION_CODE,
             qty: Number(variant.stocks || 0),
             product_id: String(product.id),
-            option_id: variant.id
-              ? String(variant.id)
-              : null,
+            option_id: variant.id ? String(variant.id) : null,
             note: 'colorme_sync',
           })
         }
-      }
-
-      // -----------------------------
-      // variantなし
-      // -----------------------------
-      else {
+      } else {
         const sku = product.model_number
-
         if (!sku) continue
 
         productRows.push({
@@ -113,10 +79,7 @@ export async function GET(req: NextRequest) {
           product_id: String(product.id),
           product_name: product.name,
           option_name: '',
-          image_url:
-            product.image_url ||
-            product.thumbnail_image_url ||
-            '',
+          image_url: product.image_url || product.thumbnail_image_url || '',
         })
 
         stockRows.push({
@@ -130,86 +93,57 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const skus = productRows.map((row) => row.sku)
-
-    // -----------------------------
-    // products更新
-    // -----------------------------
-    if (skus.length > 0) {
-      await supabase
+    if (productRows.length > 0) {
+      const { error: productUpsertError } = await supabase
         .from('products')
-        .delete()
-        .in('sku', skus)
+        .upsert(productRows, {
+          onConflict: 'sku',
+        })
 
-      const { error: productInsertError } =
-        await supabase
-          .from('products')
-          .insert(productRows)
-
-      if (productInsertError) {
-        throw new Error(productInsertError.message)
-      }
-
-      // -----------------------------
-      // stock更新
-      // -----------------------------
-      const { error: productInsertError } = await supabase
-  .from('products')
-  .upsert(productRows, {
-    onConflict: 'sku',
-  })
-
-      if (stockInsertError) {
-        throw new Error(stockInsertError.message)
+      if (productUpsertError) {
+        throw new Error(productUpsertError.message)
       }
     }
 
-    // -----------------------------
-    // 最終ページだけ履歴保存
-    // -----------------------------
+    if (stockRows.length > 0) {
+      const { error: stockUpsertError } = await supabase
+        .from('stock_by_location')
+        .upsert(stockRows, {
+          onConflict: 'sku,location_code',
+        })
+
+      if (stockUpsertError) {
+        throw new Error(stockUpsertError.message)
+      }
+    }
+
     let snapshotCount: number | null = null
 
     if (products.length < limit) {
-      const result =
-        await saveStockSnapshot(supabase)
-
+      const result = await saveStockSnapshot(supabase)
       snapshotCount = result.count
     }
 
-    // -----------------------------
-    // 自動巡回
-    // -----------------------------
-    
-
-    // -----------------------------
-    // 完了
-    // -----------------------------
     return NextResponse.json({
-      nextUrl:
-  products.length === limit
-    ? `${req.nextUrl.origin}/api/sync-colorme-stock?offset=${offset + limit}&limit=${limit}`
-    : null,
       ok: true,
+      nextUrl:
+        products.length === limit
+          ? `${req.nextUrl.origin}/api/sync-colorme-stock?offset=${offset + limit}&limit=${limit}`
+          : null,
       offset,
       limit,
       fetchedProducts: products.length,
       productRows: productRows.length,
       stockRows: stockRows.length,
       hasNext: products.length === limit,
-      nextOffset:
-        products.length === limit
-          ? offset + limit
-          : null,
+      nextOffset: products.length === limit ? offset + limit : null,
       snapshotCount,
     })
   } catch (error) {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     )
