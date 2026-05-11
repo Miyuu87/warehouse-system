@@ -399,6 +399,11 @@ export default function StockWatchPage() {
     <main style={pageStyle}>
       <div style={headerRowStyle}>
         <h1 style={titleStyle}>在庫注視アイテム</h1>
+        {lastSnapshotAt && (
+  <div style={lastUpdateStyle}>
+    最終在庫更新: {lastSnapshotAt}
+  </div>
+)}
 <button onClick={snapshotStock} style={subButtonStyle}>
   履歴保存
 </button>
@@ -1219,4 +1224,10 @@ const recentSoldSkuStyle: React.CSSProperties = {
   color: '#d93025',
   fontWeight: 800,
   marginTop: 4,
+}
+const lastUpdateStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: '#666',
+  marginTop: 4,
+  fontWeight: 600,
 }
