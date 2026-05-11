@@ -1111,7 +1111,6 @@ const commentStyle: React.CSSProperties = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 800,
-  marginBottom: 10,
 }
 
 const buttonRowStyle: React.CSSProperties = {
