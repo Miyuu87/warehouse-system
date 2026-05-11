@@ -276,7 +276,7 @@ async function updateItem(item: WatchItem) {
       : item.comment_updated_at || currentItem?.comment_updated_at,
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('stock_watch_items')
     .update({
       parent_sku: updatedItem.parent_sku,
@@ -286,9 +286,15 @@ async function updateItem(item: WatchItem) {
       pinned: updatedItem.pinned,
     })
     .eq('id', item.id)
+    .select('*')
 
   if (error) {
     alert('保存エラー: ' + error.message)
+    return
+  }
+
+  if (!data || data.length === 0) {
+    alert('保存できませんでした。SupabaseのRLSでUPDATEが許可されていない可能性があります。')
     return
   }
 
