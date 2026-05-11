@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { saveStockSnapshot } from '@/app/lib/stockSnapshot'
 
 const supabase = createClient(
@@ -11,8 +11,9 @@ const COLORME_API = 'https://api.shop-pro.jp/v1'
 const LOCATION_CODE = 'COLORME'
 const LIMIT = 20
 const MAX_PAGES_PER_RUN = 10
+const STATE_KEY = 'colorme_next_offset'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const accessToken = process.env.COLORME_ACCESS_TOKEN
 
@@ -23,8 +24,14 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const urlOffset = Number(req.nextUrl.searchParams.get('offset') || 0)
-    let offset = urlOffset
+    const { data: state } = await supabase
+      .from('sync_state')
+      .select('value')
+      .eq('key', STATE_KEY)
+      .single()
+
+    let offset = Number(state?.value || 0)
+    const startOffset = offset
 
     let totalFetchedProducts = 0
     let totalProductRows = 0
@@ -106,9 +113,7 @@ export async function GET(req: NextRequest) {
       if (productRows.length > 0) {
         const { error: productUpsertError } = await supabase
           .from('products')
-          .upsert(productRows, {
-            onConflict: 'sku',
-          })
+          .upsert(productRows, { onConflict: 'sku' })
 
         if (productUpsertError) {
           throw new Error(productUpsertError.message)
@@ -118,9 +123,7 @@ export async function GET(req: NextRequest) {
       if (stockRows.length > 0) {
         const { error: stockUpsertError } = await supabase
           .from('stock_by_location')
-          .upsert(stockRows, {
-            onConflict: 'sku,location_code',
-          })
+          .upsert(stockRows, { onConflict: 'sku,location_code' })
 
         if (stockUpsertError) {
           throw new Error(stockUpsertError.message)
@@ -144,18 +147,24 @@ export async function GET(req: NextRequest) {
       offset += LIMIT
     }
 
+    await supabase
+      .from('sync_state')
+      .upsert({
+        key: STATE_KEY,
+        value: String(offset),
+        updated_at: new Date().toISOString(),
+      })
+
     return NextResponse.json({
       ok: true,
-      mode: 'cron_chunk',
+      mode: 'cron_stateful',
+      startOffset,
+      nextOffset: offset,
       processedPages: Math.ceil(totalFetchedProducts / LIMIT),
       totalFetchedProducts,
       totalProductRows,
       totalStockRows,
       hasNext,
-      nextOffset: hasNext ? offset : 0,
-      nextUrl: hasNext
-        ? `${req.nextUrl.origin}/api/sync-colorme-cron?offset=${offset}`
-        : `${req.nextUrl.origin}/api/sync-colorme-cron?offset=0`,
       snapshotCount,
     })
   } catch (error) {
