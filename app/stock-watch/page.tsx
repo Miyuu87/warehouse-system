@@ -433,7 +433,12 @@ async function updateItem(item: WatchItem) {
   return (
     <main style={pageStyle}>
       <div style={headerRowStyle}>
-        <h1 style={titleStyle}>在庫注視アイテム</h1>
+        <div>
+  <h1 style={titleStyle}>在庫チェックリスト</h1>
+  <p style={descriptionStyle}>
+    売れ行き・在庫切れ・再入荷確認が必要な商品をスタッフ間で共有するページです。
+  </p>
+</div>
         {lastSnapshotAt && (
   <div style={lastUpdateStyle}>
     最終在庫更新: {lastSnapshotAt}
@@ -457,6 +462,19 @@ async function updateItem(item: WatchItem) {
           </select>
         </label>
       </div>
+
+      <div style={summaryRowStyle}>
+  <div style={summaryCardStyle}>登録商品：{items.length}件</div>
+  <div style={summaryCardStyle}>
+    ピン留め：{items.filter((item) => item.pinned).length}件
+  </div>
+  <div style={summaryCardStyle}>
+    在庫0：{items.filter((item) => {
+      const rows = getProductRows(item)
+      return rows.length > 0 && getTotalStock(item) === 0
+    }).length}件
+  </div>
+</div>
 
       <section style={filterStyle}>
         <label style={labelStyle}>
@@ -1291,4 +1309,26 @@ const commentDateStyle: React.CSSProperties = {
   fontSize: 11,
   color: '#777',
   fontWeight: 700,
+}
+const descriptionStyle: React.CSSProperties = {
+  margin: '6px 0 0',
+  color: '#666',
+  fontSize: 14,
+  fontWeight: 600,
+}
+
+const summaryRowStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+  gap: 12,
+  marginBottom: 16,
+}
+
+const summaryCardStyle: React.CSSProperties = {
+  background: '#fff',
+  borderRadius: 14,
+  padding: '12px 14px',
+  fontSize: 14,
+  fontWeight: 800,
+  boxShadow: '0 4px 14px rgba(0,0,0,0.05)',
 }
