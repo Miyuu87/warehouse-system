@@ -17,8 +17,8 @@ type WatchItem = {
   product_url?: string
   image_url?: string
   created_at?: string
+  comment_updated_at?: string
 }
-
 type ProductData = {
   sku: string
   product_name: string
@@ -180,14 +180,17 @@ export default function StockWatchPage() {
       return
     }
 
-    const { error } = await supabase.from('stock_watch_items').insert({
-      parent_sku: sku,
-      registered_by: registeredBy.trim() || '未入力',
-      comment: comment.trim(),
-      pinned,
-      product_url: '',
-      image_url: '',
-    })
+    const now = new Date().toISOString()
+
+const { error } = await supabase.from('stock_watch_items').insert({
+  parent_sku: sku,
+  registered_by: registeredBy.trim() || '未入力',
+  comment: comment.trim(),
+  comment_updated_at: comment.trim() ? now : null,
+  pinned,
+  product_url: '',
+  image_url: '',
+})
 
     if (error) {
       alert('登録エラー: ' + error.message)
@@ -226,14 +229,17 @@ export default function StockWatchPage() {
       return
     }
 
-    const rows = uniqueSkus.map((sku) => ({
-      parent_sku: sku,
-      registered_by: registeredBy.trim() || '未入力',
-      comment: comment.trim(),
-      pinned: false,
-      product_url: '',
-      image_url: '',
-    }))
+    const now = new Date().toISOString()
+
+const rows = uniqueSkus.map((sku) => ({
+  parent_sku: sku,
+  registered_by: registeredBy.trim() || '未入力',
+  comment: comment.trim(),
+  comment_updated_at: comment.trim() ? now : null,
+  pinned: false,
+  product_url: '',
+  image_url: '',
+}))
 
     const { error } = await supabase.from('stock_watch_items').insert(rows)
 
@@ -255,25 +261,47 @@ export default function StockWatchPage() {
     }
   }
 
-  async function updateItem(item: WatchItem) {
-    const { error } = await supabase
-      .from('stock_watch_items')
-      .update({
-        parent_sku: item.parent_sku,
-        registered_by: item.registered_by,
-        comment: item.comment || '',
-        pinned: item.pinned,
-      })
-      .eq('id', item.id)
+async function updateItem(item: WatchItem) {
+  const currentItem = items.find((i) => i.id === item.id)
+  const commentChanged =
+    (currentItem?.comment || '') !== (item.comment || '')
 
-    if (error) {
-      alert('保存エラー: ' + error.message)
-      return
-    }
-
-    alert('保存しました')
-    fetchItems()
+  const updatedItem = {
+    ...item,
+    parent_sku: item.parent_sku.trim(),
+    registered_by: item.registered_by.trim() || '未入力',
+    comment: item.comment || '',
+    comment_updated_at: commentChanged
+      ? new Date().toISOString()
+      : item.comment_updated_at || currentItem?.comment_updated_at || null,
   }
+
+  const { data, error } = await supabase
+    .from('stock_watch_items')
+    .update({
+      parent_sku: updatedItem.parent_sku,
+      registered_by: updatedItem.registered_by,
+      comment: updatedItem.comment,
+      comment_updated_at: updatedItem.comment_updated_at,
+      pinned: updatedItem.pinned,
+    })
+    .eq('id', item.id)
+    .select('*')
+    .single()
+
+  if (error) {
+    alert('保存エラー: ' + error.message)
+    return
+  }
+
+  setItems((current) =>
+    current.map((i) => (i.id === item.id ? data : i))
+  )
+
+  await fetchProductData(data.parent_sku)
+
+  setSelectedItem(null)
+}
 
   async function deleteItem(id: number) {
     const ok = confirm('この注視アイテムを削除しますか？')
@@ -323,6 +351,15 @@ export default function StockWatchPage() {
 
     return `https://noiseandkisses.com/?pid=${productId}`
   }
+  function formatDate(value?: string) {
+  if (!value) return ''
+
+  return new Date(value).toLocaleDateString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+}
 
   async function snapshotStock() {
   const ok = confirm('現在の在庫を履歴として保存しますか？')
@@ -556,7 +593,14 @@ export default function StockWatchPage() {
               </div>
 
               <div style={{ padding: 16 }}>
-                {item.comment && <div style={commentStyle}>{item.comment}</div>}
+                {item.comment && (
+  <div style={commentWrapStyle}>
+    <span style={commentStyle}>{item.comment}</span>
+    <span style={commentDateStyle}>
+      {formatDate(item.comment_updated_at || item.created_at)}
+    </span>
+  </div>
+)}
 
                 <h2 style={cardTitleStyle}>{getMainName(item)}</h2>
 
@@ -620,8 +664,14 @@ export default function StockWatchPage() {
       )}
 
       {selectedItem && (
-        <div style={modalOverlayStyle}>
-          <div style={modalStyle}>
+        <div
+  style={modalOverlayStyle}
+  onClick={() => setSelectedItem(null)}
+>
+  <div
+    style={modalStyle}
+    onClick={(e) => e.stopPropagation()}
+  >
             <div style={modalHeaderStyle}>
               <h2 style={modalTitleStyle}>{getMainName(selectedItem)}</h2>
 
@@ -1230,4 +1280,17 @@ const lastUpdateStyle: React.CSSProperties = {
   color: '#666',
   marginTop: 4,
   fontWeight: 600,
+}
+const commentWrapStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  flexWrap: 'wrap',
+  marginBottom: 10,
+}
+
+const commentDateStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: '#777',
+  fontWeight: 700,
 }
