@@ -27,14 +27,19 @@ type ProductData = {
   product_id?: string
   stock: number
 }
+type StockChange = {
+  sku: string
+  sold_count: number
+}
 
-type SortType = 'pinned' | 'stock_asc' | 'stock_desc' | 'newest'
+type SortType = 'pinned' | 'stock_asc' | 'stock_desc' | 'newest' | 'recent_sold'
 type StockFilter = 'all' | 'zero_only' | 'hide_zero'
 
 export default function StockWatchPage() {
   const [items, setItems] = useState<WatchItem[]>([])
   const [selectedItem, setSelectedItem] = useState<WatchItem | null>(null)
   const [productMap, setProductMap] = useState<Record<string, ProductData[]>>({})
+  const [stockChanges, setStockChanges] = useState<Record<string, number>>({})
   const [sortType, setSortType] = useState<SortType>('pinned')
   const [searchText, setSearchText] = useState('')
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
@@ -47,8 +52,9 @@ export default function StockWatchPage() {
   const [pinned, setPinned] = useState(false)
 
   useEffect(() => {
-    fetchItems()
-  }, [])
+  fetchItems()
+  fetchStockChanges()
+}, [])
 
   async function fetchItems() {
     const { data, error } = await supabase
@@ -121,6 +127,27 @@ export default function StockWatchPage() {
 
     return merged
   }
+  
+  async function fetchStockChanges() {
+  const { data, error } = await supabase
+    .from('recent_stock_changes')
+    .select('sku, sold_count')
+
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const map: Record<string, number> = {}
+
+  for (const row of data || []) {
+    if (row.sold_count > 0) {
+      map[row.sku] = row.sold_count
+    }
+  }
+
+  setStockChanges(map)
+}
 
   async function addItem() {
     const sku = parentSku.trim()
@@ -259,6 +286,12 @@ export default function StockWatchPage() {
   function getTotalStock(item: WatchItem) {
     return getProductRows(item).reduce((sum, row) => sum + row.stock, 0)
   }
+  
+  function getRecentSoldCount(item: WatchItem) {
+  return getProductRows(item).reduce((sum, row) => {
+    return sum + (stockChanges[row.sku] || 0)
+  }, 0)
+}
 
   function getMainImage(item: WatchItem) {
     return getProductRows(item)[0]?.image_url || ''
@@ -317,6 +350,9 @@ export default function StockWatchPage() {
 
       if (sortType === 'stock_asc') return stockA - stockB
       if (sortType === 'stock_desc') return stockB - stockA
+      if (sortType === 'recent_sold') {
+  return getRecentSoldCount(b) - getRecentSoldCount(a)
+}
 
       return (
         new Date(b.created_at || '').getTime() -
@@ -337,6 +373,7 @@ export default function StockWatchPage() {
             onChange={(e) => setSortType(e.target.value as SortType)}
             style={sortSelectStyle}
           >
+            <option value="recent_sold">最近売れた順</option>
             <option value="pinned">ピン留め優先</option>
             <option value="stock_asc">在庫少ない順</option>
             <option value="stock_desc">在庫多い順</option>
@@ -488,6 +525,11 @@ export default function StockWatchPage() {
                 <p style={subTextStyle}>
                   在庫合計：{rows.length > 0 ? totalStock : '未取得'}
                 </p>
+                {getRecentSoldCount(item) > 0 && (
+  <p style={soldTextStyle}>
+    🔥 最近{getRecentSoldCount(item)}点売れました
+  </p>
+)}
 
                 <div style={buttonRowStyle}>
                   <button onClick={() => setSelectedItem(item)} style={detailButtonStyle}>
@@ -1109,4 +1151,10 @@ const floatingDeleteButtonStyle: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 18,
   zIndex: 5,
+}
+const soldTextStyle: React.CSSProperties = {
+  fontSize: 14,
+  color: '#d93025',
+  fontWeight: 800,
+  marginBottom: 8,
 }
