@@ -456,6 +456,12 @@ export default function StockWatchPage() {
 
           return (
             <div key={item.id} style={cardStyle}>
+              <button
+  onClick={() => deleteItem(item.id)}
+  style={floatingDeleteButtonStyle}
+>
+  ×
+</button>
               <div
                 style={{ ...imageBoxStyle, cursor: 'pointer' }}
                 onClick={() => setSelectedItem(item)}
@@ -517,9 +523,6 @@ export default function StockWatchPage() {
                     🔗
                   </button>
 
-                  <button onClick={() => deleteItem(item.id)} style={deleteButtonStyle}>
-                    ×
-                  </button>
                 </div>
               </div>
             </div>
@@ -856,6 +859,7 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 20,
   overflow: 'hidden',
   boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+  position: 'relative',
 }
 
 const imageBoxStyle: React.CSSProperties = {
@@ -1090,4 +1094,19 @@ const modalDeleteButtonStyle: React.CSSProperties = {
   background: '#fff',
   cursor: 'pointer',
   fontWeight: 800,
+}
+const floatingDeleteButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 10,
+  right: 10,
+  width: 34,
+  height: 34,
+  borderRadius: '50%',
+  border: 'none',
+  background: 'rgba(0,0,0,0.75)',
+  color: '#fff',
+  cursor: 'pointer',
+  fontWeight: 900,
+  fontSize: 18,
+  zIndex: 5,
 }
