@@ -292,10 +292,7 @@ async function updateItem(item: WatchItem) {
     return
   }
 
-  setItems((current) =>
-    current.map((i) => (i.id === item.id ? updatedItem : i))
-  )
-
+  await fetchItems()
   await fetchProductData(updatedItem.parent_sku)
 
   setSelectedItem(null)
