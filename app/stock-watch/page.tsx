@@ -285,9 +285,9 @@ async function updateItem(item: WatchItem) {
       comment_updated_at: updatedItem.comment_updated_at,
       pinned: updatedItem.pinned,
     })
-    .eq('id', item.id)
+        .eq('id', item.id)
     .select('*')
-    .single()
+    .maybeSingle()
 
   if (error) {
     alert('保存エラー: ' + error.message)
