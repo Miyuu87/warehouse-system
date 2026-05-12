@@ -8,7 +8,6 @@ const supabase = createClient(
 )
 
 const COLORME_API = 'https://api.shop-pro.jp/v1'
-const LOCATION_CODE = 'COLORME'
 const LIMIT = 20
 const MAX_PAGES_PER_RUN = 10
 const STATE_KEY = 'colorme_next_offset'
@@ -35,7 +34,6 @@ export async function GET() {
 
     let totalFetchedProducts = 0
     let totalProductRows = 0
-    let totalStockRows = 0
     let hasNext = true
     let snapshotCount: number | null = null
 
@@ -60,7 +58,6 @@ export async function GET() {
 
       const products = json.products || []
       const productRows: any[] = []
-      const stockRows: any[] = []
 
       for (const product of products) {
         const variants = product.variants || []
@@ -75,16 +72,9 @@ export async function GET() {
               product_id: String(product.id),
               product_name: product.name,
               option_name: variant.title || variant.option1_value || '',
-              image_url: product.image_url || product.thumbnail_image_url || '',
-            })
-
-            stockRows.push({
-              sku,
-              location_code: LOCATION_CODE,
-              qty: Number(variant.stocks || 0),
-              product_id: String(product.id),
-              option_id: variant.id ? String(variant.id) : null,
-              note: 'colorme_cron_sync',
+              image_url:
+                product.image_url || product.thumbnail_image_url || '',
+              colorme_stock: Number(variant.stocks || 0),
             })
           }
         } else {
@@ -96,16 +86,9 @@ export async function GET() {
             product_id: String(product.id),
             product_name: product.name,
             option_name: '',
-            image_url: product.image_url || product.thumbnail_image_url || '',
-          })
-
-          stockRows.push({
-            sku,
-            location_code: LOCATION_CODE,
-            qty: Number(product.stocks || 0),
-            product_id: String(product.id),
-            option_id: null,
-            note: 'colorme_cron_sync',
+            image_url:
+              product.image_url || product.thumbnail_image_url || '',
+            colorme_stock: Number(product.stocks || 0),
           })
         }
       }
@@ -120,19 +103,8 @@ export async function GET() {
         }
       }
 
-      if (stockRows.length > 0) {
-        const { error: stockUpsertError } = await supabase
-          .from('stock_by_location')
-          .upsert(stockRows, { onConflict: 'sku,location_code' })
-
-        if (stockUpsertError) {
-          throw new Error(stockUpsertError.message)
-        }
-      }
-
       totalFetchedProducts += products.length
       totalProductRows += productRows.length
-      totalStockRows += stockRows.length
 
       if (products.length < LIMIT) {
         hasNext = false
@@ -163,7 +135,6 @@ export async function GET() {
       processedPages: Math.ceil(totalFetchedProducts / LIMIT),
       totalFetchedProducts,
       totalProductRows,
-      totalStockRows,
       hasNext,
       snapshotCount,
     })
