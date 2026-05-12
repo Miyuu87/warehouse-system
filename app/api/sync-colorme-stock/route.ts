@@ -8,7 +8,6 @@ const supabase = createClient(
 )
 
 const COLORME_API = 'https://api.shop-pro.jp/v1'
-const LOCATION_CODE = 'COLORME'
 
 export async function GET(req: NextRequest) {
   try {
@@ -43,7 +42,6 @@ export async function GET(req: NextRequest) {
 
     const products = json.products || []
     const productRows: any[] = []
-    const stockRows: any[] = []
 
     for (const product of products) {
       const variants = product.variants || []
@@ -58,16 +56,9 @@ export async function GET(req: NextRequest) {
             product_id: String(product.id),
             product_name: product.name,
             option_name: variant.title || variant.option1_value || '',
-            image_url: product.image_url || product.thumbnail_image_url || '',
-          })
-
-          stockRows.push({
-            sku,
-            location_code: LOCATION_CODE,
-            qty: Number(variant.stocks || 0),
-            product_id: String(product.id),
-            option_id: variant.id ? String(variant.id) : null,
-            note: 'colorme_sync',
+            image_url:
+              product.image_url || product.thumbnail_image_url || '',
+            colorme_stock: Number(variant.stocks || 0),
           })
         }
       } else {
@@ -79,16 +70,9 @@ export async function GET(req: NextRequest) {
           product_id: String(product.id),
           product_name: product.name,
           option_name: '',
-          image_url: product.image_url || product.thumbnail_image_url || '',
-        })
-
-        stockRows.push({
-          sku,
-          location_code: LOCATION_CODE,
-          qty: Number(product.stocks || 0),
-          product_id: String(product.id),
-          option_id: null,
-          note: 'colorme_sync',
+          image_url:
+            product.image_url || product.thumbnail_image_url || '',
+          colorme_stock: Number(product.stocks || 0),
         })
       }
     }
@@ -102,18 +86,6 @@ export async function GET(req: NextRequest) {
 
       if (productUpsertError) {
         throw new Error(productUpsertError.message)
-      }
-    }
-
-    if (stockRows.length > 0) {
-      const { error: stockUpsertError } = await supabase
-        .from('stock_by_location')
-        .upsert(stockRows, {
-          onConflict: 'sku,location_code',
-        })
-
-      if (stockUpsertError) {
-        throw new Error(stockUpsertError.message)
       }
     }
 
@@ -134,7 +106,6 @@ export async function GET(req: NextRequest) {
       limit,
       fetchedProducts: products.length,
       productRows: productRows.length,
-      stockRows: stockRows.length,
       hasNext: products.length === limit,
       nextOffset: products.length === limit ? offset + limit : null,
       snapshotCount,
