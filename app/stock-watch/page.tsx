@@ -77,57 +77,47 @@ export default function StockWatchPage() {
   }
 
   async function fetchProductData(parentSku: string) {
-    const { data: products, error: productError } = await supabase
-  .from('products')
-  .select('*')
-  .or(`sku.eq.${parentSku},sku.ilike.${parentSku}-%`)
+  const { data: products, error: productError } = await supabase
+    .from('products')
+    .select(`
+      sku,
+      product_name,
+      option_name,
+      image_url,
+      product_id,
+      colorme_stock
+    `)
+    .or(`sku.eq.${parentSku},sku.ilike.${parentSku}-%`)
 
-    if (productError) {
-      console.error(productError)
-      return []
-    }
+  if (productError) {
+    console.error(productError)
+    return []
+  }
 
-    if (!products || products.length === 0) {
-      setProductMap((prev) => ({
-        ...prev,
-        [parentSku]: [],
-      }))
-      return []
-    }
-
-    const skuList = products.map((p) => p.sku)
-
-    const { data: stocks, error: stockError } = await supabase
-      .from('stock_by_location')
-      .select('*')
-      .in('sku', skuList)
-
-    if (stockError) {
-      console.error(stockError)
-    }
-
-    const stockMap: Record<string, number> = {}
-
-    for (const row of stocks || []) {
-      stockMap[row.sku] = (stockMap[row.sku] || 0) + (row.qty || 0)
-    }
-
-    const merged: ProductData[] = products.map((p) => ({
-      sku: p.sku,
-      product_name: p.product_name,
-      option_name: p.option_name,
-      image_url: p.image_url,
-      product_id: p.product_id,
-      stock: stockMap[p.sku] || 0,
-    }))
-
+  if (!products || products.length === 0) {
     setProductMap((prev) => ({
       ...prev,
-      [parentSku]: merged,
+      [parentSku]: [],
     }))
-
-    return merged
+    return []
   }
+
+  const merged: ProductData[] = products.map((p) => ({
+    sku: p.sku,
+    product_name: p.product_name,
+    option_name: p.option_name,
+    image_url: p.image_url,
+    product_id: p.product_id,
+    stock: Number(p.colorme_stock || 0),
+  }))
+
+  setProductMap((prev) => ({
+    ...prev,
+    [parentSku]: merged,
+  }))
+
+  return merged
+}
   
   async function fetchStockChanges() {
   const { data, error } = await supabase
