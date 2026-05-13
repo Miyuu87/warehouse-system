@@ -908,7 +908,7 @@ const formStyle: React.CSSProperties = {
   marginBottom: 24,
   boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gridTemplateColumns: 'minmax(160px, 1fr) minmax(160px, 1fr) minmax(260px, 2fr) auto auto auto',
   gap: 12,
   alignItems: 'end',
 }
@@ -952,6 +952,7 @@ const checkStyle: React.CSSProperties = {
 }
 
 const addButtonStyle: React.CSSProperties = {
+    minWidth: 120,
   height: 48,
   borderRadius: 12,
   border: 'none',
