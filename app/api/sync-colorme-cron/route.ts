@@ -8,8 +8,8 @@ const supabase = createClient(
 )
 
 const COLORME_API = 'https://api.shop-pro.jp/v1'
-const LIMIT = 20
-const MAX_PAGES_PER_RUN = 10
+const LIMIT = 100
+const MAX_PAGES_PER_RUN = 7
 const STATE_KEY = 'colorme_next_offset'
 
 export async function GET() {
