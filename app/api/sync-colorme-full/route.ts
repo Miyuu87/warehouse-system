@@ -1,197 +1,168 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { saveStockSnapshot } from '@/app/lib/stockSnapshot'
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+)
 
-const COLORME_API = "https://api.shop-pro.jp/v1";
-const LIMIT = 100;
+const COLORME_API = 'https://api.shop-pro.jp/v1'
+const LIMIT = 100
 
 function normalizeSku(value: unknown) {
-  return String(value ?? "").trim().toUpperCase();
-}
-
-function toNumber(value: unknown) {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
+  return String(value ?? '').trim().toUpperCase()
 }
 
 export async function GET() {
-  const startedAt = new Date().toISOString();
+  const startedAt = new Date().toISOString()
 
   try {
-    const accessToken = process.env.COLORME_ACCESS_TOKEN;
+    const accessToken = process.env.COLORME_ACCESS_TOKEN
 
     if (!accessToken) {
       return NextResponse.json(
-        { ok: false, error: "COLORME_ACCESS_TOKEN is missing" },
+        { ok: false, error: 'COLORME_ACCESS_TOKEN is missing' },
         { status: 500 }
-      );
+      )
     }
 
-    const syncRunId = crypto.randomUUID();
-    let offset = 0;
-    let fetchedProducts = 0;
-    let updatedRows = 0;
-    let zeroedRows = 0;
+    const syncRunId = crypto.randomUUID()
+
+    let offset = 0
+    let totalFetchedProducts = 0
+    let totalProductRows = 0
+    let totalPages = 0
+    let zeroMissingDone = false
+    let snapshotCount: number | null = null
 
     while (true) {
-      const url = `${COLORME_API}/products.json?limit=${LIMIT}&offset=${offset}`;
+      const res = await fetch(
+        `${COLORME_API}/products.json?limit=${LIMIT}&offset=${offset}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: 'no-store',
+        }
+      )
 
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        cache: "no-store",
-      });
+      const json = await res.json()
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`ColorMe API error ${res.status}: ${text}`);
+        return NextResponse.json(
+          { ok: false, error: json, offset },
+          { status: 500 }
+        )
       }
 
-      const json = await res.json();
-      const products = Array.isArray(json.products) ? json.products : [];
-
-      if (products.length === 0) break;
-
-      fetchedProducts += products.length;
-
-      const rows: any[] = [];
+      const products = json.products || []
+      const productRows: any[] = []
 
       for (const product of products) {
-        const productId = String(product.id ?? "");
-        const productName = String(product.name ?? "");
-        const imageUrl =
-          product.image_url ||
-          product.thumbnail_image_url ||
-          product.image?.src ||
-          null;
-
-        const variants = Array.isArray(product.variants)
-          ? product.variants
-          : Array.isArray(product.options)
-          ? product.options
-          : [];
+        const variants = product.variants || []
 
         if (variants.length > 0) {
           for (const variant of variants) {
-            const sku = normalizeSku(
-              variant.sku || variant.model_number || variant.product_code
-            );
+            const sku = normalizeSku(variant.model_number)
+            if (!sku) continue
 
-            if (!sku) continue;
-
-            rows.push({
-              product_id: productId,
-              option_id: String(variant.id ?? ""),
+            productRows.push({
               sku,
-              product_name: productName,
-              option_name: String(
-                variant.name ||
-                  variant.option_name ||
-                  variant.title ||
-                  ""
-              ),
-              barcode: variant.barcode || null,
-              image_url: imageUrl,
-              colorme_stock: toNumber(
-                variant.stock ?? variant.stocks ?? variant.inventory_quantity
-              ),
+              product_id: String(product.id),
+              product_name: product.name,
+              option_name: variant.title || variant.option1_value || '',
+              image_url: product.image_url || product.thumbnail_image_url || '',
+              colorme_stock: Number(variant.stocks || 0),
               has_option: true,
               is_active: true,
               full_sync_run_id: syncRunId,
               full_synced_at: startedAt,
               updated_at: startedAt,
-            });
+            })
           }
         } else {
-          const sku = normalizeSku(
-            product.sku || product.model_number || product.product_code
-          );
+          const sku = normalizeSku(product.model_number)
+          if (!sku) continue
 
-          if (!sku) continue;
-
-          rows.push({
-            product_id: productId,
-            option_id: null,
+          productRows.push({
             sku,
-            product_name: productName,
-            option_name: null,
-            barcode: product.barcode || null,
-            image_url: imageUrl,
-            colorme_stock: toNumber(
-              product.stock ?? product.stocks ?? product.inventory_quantity
-            ),
+            product_id: String(product.id),
+            product_name: product.name,
+            option_name: '',
+            image_url: product.image_url || product.thumbnail_image_url || '',
+            colorme_stock: Number(product.stocks || 0),
             has_option: false,
             is_active: true,
             full_sync_run_id: syncRunId,
             full_synced_at: startedAt,
             updated_at: startedAt,
-          });
+          })
         }
       }
 
-      if (rows.length > 0) {
-        const { error } = await supabase.from("products").upsert(rows, {
-          onConflict: "sku",
-        });
+      if (productRows.length > 0) {
+        const { error: productUpsertError } = await supabase
+          .from('products')
+          .upsert(productRows, { onConflict: 'sku' })
 
-        if (error) {
-          throw new Error(`Supabase upsert error: ${error.message}`);
+        if (productUpsertError) {
+          throw new Error(productUpsertError.message)
         }
-
-        updatedRows += rows.length;
       }
 
-      if (products.length < LIMIT) break;
-      offset += LIMIT;
+      totalFetchedProducts += products.length
+      totalProductRows += productRows.length
+      totalPages += 1
+
+      if (products.length < LIMIT) {
+        break
+      }
+
+      offset += LIMIT
     }
 
-    const { error: zeroError, count } = await supabase
-      .from("products")
+    const { error: zeroError } = await supabase
+      .from('products')
       .update({
         colorme_stock: 0,
         full_synced_at: startedAt,
         updated_at: startedAt,
       })
-      .neq("full_sync_run_id", syncRunId)
-      .eq("is_active", true)
-      .select("id", { count: "exact" });
+      .neq('full_sync_run_id', syncRunId)
+      .eq('is_active', true)
 
     if (zeroError) {
-      throw new Error(`Zero missing products error: ${zeroError.message}`);
+      throw new Error(`Zero missing products error: ${zeroError.message}`)
     }
 
-    zeroedRows = count ?? 0;
+    zeroMissingDone = true
+
+    const snapshot = await saveStockSnapshot(supabase)
+    snapshotCount = snapshot.count
 
     return NextResponse.json({
       ok: true,
-      mode: "full",
+      mode: 'full',
       startedAt,
       finishedAt: new Date().toISOString(),
       syncRunId,
-      fetchedProducts,
-      updatedRows,
-      zeroedRows,
-    });
+      totalPages,
+      totalFetchedProducts,
+      totalProductRows,
+      zeroMissingDone,
+      snapshotCount,
+    })
   } catch (error) {
-    console.error(error);
-
     return NextResponse.json(
       {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "sync-colorme-full failed",
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
-    );
+    )
   }
 }
