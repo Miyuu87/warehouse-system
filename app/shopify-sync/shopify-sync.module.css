@@ -20,8 +20,9 @@
 .stats span { display: block; color: #777; font-size: 12px; margin-bottom: 6px; }
 .stats strong { font-size: 20px; }
 .danger { color: #bd1f2d; }
-.notice, .errorBox { max-width: 1500px; margin: 0 auto 14px; padding: 12px 15px; border-radius: 9px; }
+.notice, .warningBox, .errorBox { max-width: 1500px; margin: 0 auto 14px; padding: 12px 15px; border-radius: 9px; }
 .notice { background: #edf7ed; border: 1px solid #bdddbd; }
+.warningBox { background: #fff8e6; border: 1px solid #e6cb84; color: #76540b; }
 .errorBox { background: #fff0f1; border: 1px solid #e6afb4; color: #8b1b24; }
 .toolbar { max-width: 1500px; margin: 0 auto 18px; display: flex; gap: 9px; align-items: center; }
 .toolbar input { flex: 1; min-width: 180px; }
@@ -40,6 +41,7 @@
 .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .badges span { background: #eee; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; }
 .badges .reservedBadge { background: #ffe4aa; }
+.badges .sourceReservedBadge { background: #1f1f1f; color: #fff; }
 .inlineError { margin-top: 12px; padding: 9px 11px; border-radius: 8px; background: #fff0f1; color: #8b1b24; font-size: 12px; }
 .controls { display: grid; grid-template-columns: 170px 190px 220px minmax(0,1fr); gap: 12px; margin-top: 15px; padding-top: 14px; border-top: 1px solid #ecece7; align-items: end; }
 .controls label { display: grid; gap: 6px; color: #666; font-size: 11px; }

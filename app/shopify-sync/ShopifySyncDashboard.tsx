@@ -21,10 +21,13 @@ type SyncProduct = {
   variantCount: number
   shopifyMode: 'auto' | 'force_draft' | 'force_active' | 'force_archive'
   isReserved: boolean
+  sourceIsReserved: boolean
+  reservationSource: string
   allowVariantDelete: boolean
   note: string
   shopifyProductId: string
   lastStatus: string
+  statusReason: string
   lastSyncedAt: string | null
   errors: SyncError[]
 }
@@ -41,11 +44,29 @@ type ProductsResponse = {
   error?: string
 }
 
+type RunSummary = {
+  reservation_probe_status?: string
+  reservation_products?: number
+  reservation_fields?: string[]
+  reservation_candidate_fields?: string[]
+}
+
 const MODE_LABELS = {
   auto: '自動',
   force_draft: '常に下書き',
   force_active: '強制公開',
   force_archive: '常にアーカイブ',
+}
+
+const STATUS_REASON_LABELS: Record<string, string> = {
+  auto: '通常公開',
+  colorme_reserved: 'カラーミー予約のため下書き',
+  manual_reserved: '手動予約のため下書き',
+  zero_price: '0円のため下書き',
+  colorme_hidden: 'カラーミー非掲載のためアーカイブ',
+  manual_publish: '手動で公開',
+  manual_draft: '手動で下書き',
+  manual_archive: '手動でアーカイブ',
 }
 
 export default function ShopifySyncDashboard() {
@@ -83,6 +104,12 @@ export default function ShopifySyncDashboard() {
   }, [load])
 
   const latestRun = useMemo(() => data?.runs?.[0] || null, [data])
+  const latestSummary = useMemo(
+    () => (latestRun?.summary && typeof latestRun.summary === 'object'
+      ? latestRun.summary as RunSummary
+      : null),
+    [latestRun]
+  )
 
   function updateLocal(productId: string, changes: Partial<SyncProduct>) {
     setData((current) =>
@@ -159,6 +186,23 @@ export default function ShopifySyncDashboard() {
       </section>
 
       {message && <div className={styles.notice}>{message}</div>}
+      {latestSummary?.reservation_probe_status === 'recognized' && (
+        <div className={styles.notice}>
+          カラーミー予約フラグ取得済み：{Number(latestSummary.reservation_products || 0)}商品
+          {latestSummary.reservation_fields?.length
+            ? `（${latestSummary.reservation_fields.join(', ')}）`
+            : ''}
+        </div>
+      )}
+      {latestSummary?.reservation_probe_status === 'not_found' && (
+        <div className={styles.warningBox}>
+          カラーミー商品API内に予約フラグを確認できませんでした。
+          予約商品の自動下書きはまだ有効になっていません。
+          {latestSummary.reservation_candidate_fields?.length
+            ? ` 候補項目：${latestSummary.reservation_candidate_fields.join(', ')}`
+            : ''}
+        </div>
+      )}
       {data?.globalErrors?.map((error) => (
         <div className={styles.errorBox} key={error.id}>{error.message}</div>
       ))}
@@ -204,8 +248,17 @@ export default function ShopifySyncDashboard() {
                   <div className={styles.badges}>
                     <span>在庫 {product.totalStock}</span>
                     <span>{product.variantCount} SKU</span>
-                    {product.isReserved && <span className={styles.reservedBadge}>予約</span>}
-                    {product.lastStatus && <span>{product.lastStatus}</span>}
+                    {product.sourceIsReserved && (
+                      <span className={styles.sourceReservedBadge}>
+                        {product.shopifyMode === 'force_active'
+                          ? 'カラーミー予約・手動公開中'
+                          : 'カラーミー予約 → 下書き'}
+                      </span>
+                    )}
+                    {product.isReserved && <span className={styles.reservedBadge}>手動予約</span>}
+                    {product.statusReason && (
+                      <span>{STATUS_REASON_LABELS[product.statusReason] || product.statusReason}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -236,7 +289,7 @@ export default function ShopifySyncDashboard() {
                     disabled={savingId === product.productId}
                     onChange={(event) => saveRule(product, { isReserved: event.target.checked })}
                   />
-                  予約商品として下書きにする
+                  手動で予約扱い（下書き）
                 </label>
                 <label className={styles.checkboxLabel}>
                   <input
