@@ -13,7 +13,6 @@ export async function PUT(request: Request) {
   const productId = Number(body?.productId)
   const shopifyMode = String(body?.shopifyMode || 'auto')
   const isReserved = Boolean(body?.isReserved)
-  const allowVariantDelete = Boolean(body?.allowVariantDelete)
   const note = String(body?.note || '').slice(0, 1000)
 
   if (!Number.isSafeInteger(productId) || productId <= 0 || !ALLOWED_MODES.has(shopifyMode)) {
@@ -28,7 +27,8 @@ export async function PUT(request: Request) {
         colorme_product_id: productId,
         shopify_mode: shopifyMode,
         is_reserved: isReserved,
-        allow_variant_delete: allowVariantDelete,
+        // カラーミー側のSKU修正・削除をShopifyへ自動反映する。
+        allow_variant_delete: true,
         note,
       },
       { onConflict: 'colorme_product_id' }
