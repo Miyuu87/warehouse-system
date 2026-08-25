@@ -1,0 +1,283 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import styles from './shopify-sync.module.css'
+
+type SyncError = {
+  id: number
+  error_type: string
+  sku?: string
+  message: string
+  last_occurred_at: string
+}
+
+type SyncProduct = {
+  productId: string
+  productName: string
+  imageUrl: string
+  totalStock: number
+  skus: string[]
+  variantCount: number
+  shopifyMode: 'auto' | 'force_draft' | 'force_active' | 'force_archive'
+  isReserved: boolean
+  allowVariantDelete: boolean
+  note: string
+  shopifyProductId: string
+  lastStatus: string
+  lastSyncedAt: string | null
+  errors: SyncError[]
+}
+
+type ProductsResponse = {
+  ok: boolean
+  products: SyncProduct[]
+  page: number
+  total: number
+  totalPages: number
+  activeErrorCount: number
+  globalErrors: SyncError[]
+  runs: Array<Record<string, unknown>>
+  error?: string
+}
+
+const MODE_LABELS = {
+  auto: '自動',
+  force_draft: '常に下書き',
+  force_active: '強制公開',
+  force_archive: '常にアーカイブ',
+}
+
+export default function ShopifySyncDashboard() {
+  const router = useRouter()
+  const [data, setData] = useState<ProductsResponse | null>(null)
+  const [query, setQuery] = useState('')
+  const [submittedQuery, setSubmittedQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [savingId, setSavingId] = useState('')
+  const [running, setRunning] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const response = await fetch(
+      `/api/shopify-sync-admin/products?page=${page}&q=${encodeURIComponent(submittedQuery)}`,
+      { cache: 'no-store' }
+    )
+    if (response.status === 401) {
+      router.replace('/shopify-sync/login')
+      return
+    }
+    const json = (await response.json()) as ProductsResponse
+    setData(json)
+    setLoading(false)
+  }, [page, router, submittedQuery])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [load])
+
+  const latestRun = useMemo(() => data?.runs?.[0] || null, [data])
+
+  function updateLocal(productId: string, changes: Partial<SyncProduct>) {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            products: current.products.map((product) =>
+              product.productId === productId ? { ...product, ...changes } : product
+            ),
+          }
+        : current
+    )
+  }
+
+  async function saveRule(product: SyncProduct, changes: Partial<SyncProduct>) {
+    const next = { ...product, ...changes }
+    updateLocal(product.productId, changes)
+    setSavingId(product.productId)
+    setMessage('')
+
+    const response = await fetch('/api/shopify-sync-admin/rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        productId: product.productId,
+        shopifyMode: next.shopifyMode,
+        isReserved: next.isReserved,
+        allowVariantDelete: next.allowVariantDelete,
+        note: next.note,
+      }),
+    })
+    const json = await response.json().catch(() => ({}))
+    setSavingId('')
+    setMessage(response.ok ? '保存しました。次回同期で反映されます。' : json.error || '保存失敗')
+  }
+
+  async function runSync() {
+    if (!confirm('Shopify同期を今すぐ開始しますか？')) return
+    setRunning(true)
+    setMessage('')
+    const response = await fetch('/api/shopify-sync-admin/run', { method: 'POST' })
+    const json = await response.json().catch(() => ({}))
+    setRunning(false)
+    setMessage(response.ok ? '同期を開始しました。数分後に再読み込みしてください。' : json.error)
+  }
+
+  async function logout() {
+    await fetch('/api/shopify-sync-admin/logout', { method: 'POST' })
+    router.replace('/shopify-sync/login')
+    router.refresh()
+  }
+
+  return (
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <div>
+          <div className={styles.eyebrow}>WAREHOUSE SYSTEM</div>
+          <h1>Shopify同期管理</h1>
+          <p>カラーミーを基準に、公開状態・予約・同期エラーを管理します。</p>
+        </div>
+        <div className={styles.headerActions}>
+          <button className={styles.primaryButton} onClick={runSync} disabled={running}>
+            {running ? '開始中…' : '今すぐ同期'}
+          </button>
+          <button className={styles.secondaryButton} onClick={logout}>ログアウト</button>
+        </div>
+      </header>
+
+      <section className={styles.stats}>
+        <div><span>対象商品</span><strong>{data?.total ?? '—'}</strong></div>
+        <div><span>有効なエラー</span><strong className={data?.activeErrorCount ? styles.danger : ''}>{data?.activeErrorCount ?? '—'}</strong></div>
+        <div><span>最終同期</span><strong>{formatDate(latestRun?.started_at)}</strong></div>
+        <div><span>最終結果</span><strong>{String(latestRun?.status || '—')}</strong></div>
+      </section>
+
+      {message && <div className={styles.notice}>{message}</div>}
+      {data?.globalErrors?.map((error) => (
+        <div className={styles.errorBox} key={error.id}>{error.message}</div>
+      ))}
+
+      <form
+        className={styles.toolbar}
+        onSubmit={(event) => {
+          event.preventDefault()
+          setPage(1)
+          setSubmittedQuery(query)
+        }}
+      >
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="商品名・SKU・商品IDで検索"
+        />
+        <button className={styles.secondaryButton}>検索</button>
+        <button type="button" className={styles.textButton} onClick={() => { setQuery(''); setSubmittedQuery(''); setPage(1) }}>
+          クリア
+        </button>
+        <button type="button" className={styles.textButton} onClick={load}>再読み込み</button>
+      </form>
+
+      {loading ? (
+        <div className={styles.loading}>読み込み中…</div>
+      ) : !data?.ok ? (
+        <div className={styles.errorBox}>{data?.error || '読み込みエラー'}</div>
+      ) : (
+        <div className={styles.productGrid}>
+          {data.products.map((product) => (
+            <article className={`${styles.productCard} ${product.errors.length ? styles.hasError : ''}`} key={product.productId}>
+              <div className={styles.productTop}>
+                <div className={styles.imageWrap}>
+                  {/* External ColorMe images use many hosts, so keep a plain img here. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <span>NO IMAGE</span>}
+                </div>
+                <div className={styles.productInfo}>
+                  <div className={styles.productMeta}>ColorMe #{product.productId}</div>
+                  <h2>{product.productName || '商品名なし'}</h2>
+                  <div className={styles.skus}>{product.skus.slice(0, 6).join(' / ')}{product.skus.length > 6 ? ` ほか${product.skus.length - 6}件` : ''}</div>
+                  <div className={styles.badges}>
+                    <span>在庫 {product.totalStock}</span>
+                    <span>{product.variantCount} SKU</span>
+                    {product.isReserved && <span className={styles.reservedBadge}>予約</span>}
+                    {product.lastStatus && <span>{product.lastStatus}</span>}
+                  </div>
+                </div>
+              </div>
+
+              {product.errors.map((error) => (
+                <div className={styles.inlineError} key={error.id}>
+                  <strong>{error.error_type}</strong> {error.message}
+                </div>
+              ))}
+
+              <div className={styles.controls}>
+                <label>
+                  Shopifyの状態
+                  <select
+                    value={product.shopifyMode}
+                    disabled={savingId === product.productId}
+                    onChange={(event) =>
+                      saveRule(product, { shopifyMode: event.target.value as SyncProduct['shopifyMode'] })
+                    }
+                  >
+                    {Object.entries(MODE_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    checked={product.isReserved}
+                    disabled={savingId === product.productId}
+                    onChange={(event) => saveRule(product, { isReserved: event.target.checked })}
+                  />
+                  予約商品として下書きにする
+                </label>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    checked={product.allowVariantDelete}
+                    disabled={savingId === product.productId}
+                    onChange={(event) => saveRule(product, { allowVariantDelete: event.target.checked })}
+                  />
+                  削除されたSKUをShopifyから削除許可
+                </label>
+                <label>
+                  メモ
+                  <input
+                    value={product.note}
+                    onChange={(event) => updateLocal(product.productId, { note: event.target.value })}
+                    onBlur={() => saveRule(product, { note: product.note })}
+                    placeholder="非公開理由・特殊処理など"
+                  />
+                </label>
+              </div>
+
+              <footer>
+                <span>最終同期: {formatDate(product.lastSyncedAt)}</span>
+                <span>{savingId === product.productId ? '保存中…' : ''}</span>
+              </footer>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <nav className={styles.pagination}>
+        <button className={styles.secondaryButton} disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>前へ</button>
+        <span>{page} / {data?.totalPages || 1}</span>
+        <button className={styles.secondaryButton} disabled={page >= (data?.totalPages || 1)} onClick={() => setPage((value) => value + 1)}>次へ</button>
+      </nav>
+    </main>
+  )
+}
+
+function formatDate(value: unknown) {
+  if (!value) return '—'
+  const date = new Date(String(value))
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('ja-JP')
+}
