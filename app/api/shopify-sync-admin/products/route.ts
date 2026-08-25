@@ -5,6 +5,9 @@ import { createServerSupabase } from '@/app/lib/serverSupabase'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const ALLOWED_FILTERS = new Set(['all', 'excluded', 'manual', 'automatic'])
+type ExclusionType = 'manual' | 'automatic' | 'none'
+
 type ProductRow = {
   product_id: string | null
   sku: string
@@ -21,6 +24,8 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerSupabase()
   const search = (request.nextUrl.searchParams.get('q') || '').trim().toLowerCase()
+  const requestedFilter = request.nextUrl.searchParams.get('filter') || 'all'
+  const filter = ALLOWED_FILTERS.has(requestedFilter) ? requestedFilter : 'all'
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page') || 1))
   const pageSize = 1000
   let from = 0
@@ -84,6 +89,19 @@ export async function GET(request: NextRequest) {
     const first = variants[0]
     const rule = rules.get(productId)
     const mapping = mappings.get(productId)
+    const shopifyMode = rule?.shopify_mode || 'auto'
+    const isReserved = Boolean(rule?.is_reserved)
+    const statusReason = mapping?.status_reason || ''
+    const manualExcluded =
+      shopifyMode === 'force_draft' || shopifyMode === 'force_archive' || isReserved
+    const automaticExcluded =
+      !manualExcluded && ['colorme_reserved', 'zero_price', 'colorme_hidden'].includes(statusReason)
+    const exclusionType: ExclusionType = manualExcluded
+      ? 'manual'
+      : automaticExcluded
+        ? 'automatic'
+        : 'none'
+
     return {
       productId,
       productName: first?.product_name || '',
@@ -91,15 +109,15 @@ export async function GET(request: NextRequest) {
       totalStock: variants.reduce((sum, row) => sum + Number(row.colorme_stock || 0), 0),
       skus: variants.map((row) => row.sku).filter(Boolean),
       variantCount: variants.length,
-      shopifyMode: rule?.shopify_mode || 'auto',
-      isReserved: Boolean(rule?.is_reserved),
+      shopifyMode,
+      isReserved,
       sourceIsReserved: Boolean(mapping?.source_is_reserved),
       reservationSource: mapping?.reservation_source || '',
-      allowVariantDelete: Boolean(rule?.allow_variant_delete),
       note: rule?.note || '',
       shopifyProductId: mapping?.shopify_product_id || '',
       lastStatus: mapping?.last_status || '',
-      statusReason: mapping?.status_reason || '',
+      statusReason,
+      exclusionType,
       lastSyncedAt: mapping?.last_synced_at || null,
       errors: errorsByProduct.get(productId) || [],
     }
@@ -114,8 +132,25 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  const exclusionCounts = {
+    all: products.length,
+    excluded: products.filter((product) => product.exclusionType !== 'none').length,
+    manual: products.filter((product) => product.exclusionType === 'manual').length,
+    automatic: products.filter((product) => product.exclusionType === 'automatic').length,
+  }
+
+  if (filter === 'excluded') {
+    products = products.filter((product) => product.exclusionType !== 'none')
+  } else if (filter === 'manual' || filter === 'automatic') {
+    products = products.filter((product) => product.exclusionType === filter)
+  }
+
   products.sort((a, b) => {
     if (a.errors.length !== b.errors.length) return b.errors.length - a.errors.length
+    if (a.exclusionType !== b.exclusionType) {
+      const order: Record<ExclusionType, number> = { manual: 0, automatic: 1, none: 2 }
+      return order[a.exclusionType] - order[b.exclusionType]
+    }
     if (a.sourceIsReserved !== b.sourceIsReserved) {
       return Number(b.sourceIsReserved) - Number(a.sourceIsReserved)
     }
@@ -135,6 +170,8 @@ export async function GET(request: NextRequest) {
     perPage,
     total,
     totalPages: Math.max(1, Math.ceil(total / perPage)),
+    filter,
+    exclusionCounts,
     activeErrorCount: (errorsResult.data || []).length,
     globalErrors,
     runs: runsResult.data || [],
