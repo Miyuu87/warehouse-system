@@ -93,10 +93,13 @@ export async function GET(request: NextRequest) {
       variantCount: variants.length,
       shopifyMode: rule?.shopify_mode || 'auto',
       isReserved: Boolean(rule?.is_reserved),
+      sourceIsReserved: Boolean(mapping?.source_is_reserved),
+      reservationSource: mapping?.reservation_source || '',
       allowVariantDelete: Boolean(rule?.allow_variant_delete),
       note: rule?.note || '',
       shopifyProductId: mapping?.shopify_product_id || '',
       lastStatus: mapping?.last_status || '',
+      statusReason: mapping?.status_reason || '',
       lastSyncedAt: mapping?.last_synced_at || null,
       errors: errorsByProduct.get(productId) || [],
     }
@@ -113,6 +116,9 @@ export async function GET(request: NextRequest) {
 
   products.sort((a, b) => {
     if (a.errors.length !== b.errors.length) return b.errors.length - a.errors.length
+    if (a.sourceIsReserved !== b.sourceIsReserved) {
+      return Number(b.sourceIsReserved) - Number(a.sourceIsReserved)
+    }
     if (a.isReserved !== b.isReserved) return Number(b.isReserved) - Number(a.isReserved)
     return b.productId.localeCompare(a.productId, 'ja', { numeric: true })
   })
