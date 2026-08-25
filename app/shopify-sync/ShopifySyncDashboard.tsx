@@ -23,11 +23,11 @@ type SyncProduct = {
   isReserved: boolean
   sourceIsReserved: boolean
   reservationSource: string
-  allowVariantDelete: boolean
   note: string
   shopifyProductId: string
   lastStatus: string
   statusReason: string
+  exclusionType: 'manual' | 'automatic' | 'none'
   lastSyncedAt: string | null
   errors: SyncError[]
 }
@@ -39,10 +39,21 @@ type ProductsResponse = {
   total: number
   totalPages: number
   activeErrorCount: number
+  filter: ExclusionFilter
+  exclusionCounts: Record<ExclusionFilter, number>
   globalErrors: SyncError[]
   runs: Array<Record<string, unknown>>
   error?: string
 }
+
+type ExclusionFilter = 'all' | 'excluded' | 'manual' | 'automatic'
+type BulkAction =
+  | 'reset_auto'
+  | 'force_draft'
+  | 'force_archive'
+  | 'force_active'
+  | 'reserve_manual'
+  | 'unreserve_manual'
 
 type RunSummary = {
   reservation_probe_status?: string
@@ -69,12 +80,32 @@ const STATUS_REASON_LABELS: Record<string, string> = {
   manual_archive: '手動でアーカイブ',
 }
 
+const FILTER_LABELS: Record<ExclusionFilter, string> = {
+  all: 'すべての商品',
+  excluded: '除外中すべて',
+  manual: '手動で除外中',
+  automatic: '自動で除外中',
+}
+
+const BULK_ACTION_LABELS: Record<BulkAction, string> = {
+  reset_auto: '自動に戻す',
+  force_draft: '常に下書き',
+  force_archive: '常にアーカイブ',
+  force_active: '強制公開',
+  reserve_manual: '手動予約にする',
+  unreserve_manual: '手動予約を解除',
+}
+
 export default function ShopifySyncDashboard() {
   const router = useRouter()
   const [data, setData] = useState<ProductsResponse | null>(null)
   const [query, setQuery] = useState('')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [page, setPage] = useState(1)
+  const [filter, setFilter] = useState<ExclusionFilter>('all')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkAction, setBulkAction] = useState<BulkAction>('reset_auto')
+  const [bulkSaving, setBulkSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState('')
   const [running, setRunning] = useState(false)
@@ -83,7 +114,7 @@ export default function ShopifySyncDashboard() {
   const load = useCallback(async () => {
     setLoading(true)
     const response = await fetch(
-      `/api/shopify-sync-admin/products?page=${page}&q=${encodeURIComponent(submittedQuery)}`,
+      `/api/shopify-sync-admin/products?page=${page}&q=${encodeURIComponent(submittedQuery)}&filter=${filter}`,
       { cache: 'no-store' }
     )
     if (response.status === 401) {
@@ -93,7 +124,7 @@ export default function ShopifySyncDashboard() {
     const json = (await response.json()) as ProductsResponse
     setData(json)
     setLoading(false)
-  }, [page, router, submittedQuery])
+  }, [filter, page, router, submittedQuery])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -104,6 +135,8 @@ export default function ShopifySyncDashboard() {
   }, [load])
 
   const latestRun = useMemo(() => data?.runs?.[0] || null, [data])
+  const pageProductIds = useMemo(() => data?.products.map((product) => product.productId) || [], [data])
+  const allPageSelected = pageProductIds.length > 0 && pageProductIds.every((id) => selectedIds.has(id))
   const latestSummary = useMemo(
     () => (latestRun?.summary && typeof latestRun.summary === 'object'
       ? latestRun.summary as RunSummary
@@ -137,13 +170,54 @@ export default function ShopifySyncDashboard() {
         productId: product.productId,
         shopifyMode: next.shopifyMode,
         isReserved: next.isReserved,
-        allowVariantDelete: next.allowVariantDelete,
         note: next.note,
       }),
     })
     const json = await response.json().catch(() => ({}))
     setSavingId('')
     setMessage(response.ok ? '保存しました。次回同期で反映されます。' : json.error || '保存失敗')
+  }
+
+  function toggleProduct(productId: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(productId)
+      else next.delete(productId)
+      return next
+    })
+  }
+
+  function togglePageSelection() {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (allPageSelected) pageProductIds.forEach((id) => next.delete(id))
+      else pageProductIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  async function runBulkAction() {
+    const productIds = Array.from(selectedIds)
+    if (!productIds.length) return
+    const label = BULK_ACTION_LABELS[bulkAction]
+    if (!confirm(`${productIds.length}商品を「${label}」に変更しますか？`)) return
+
+    setBulkSaving(true)
+    setMessage('')
+    const response = await fetch('/api/shopify-sync-admin/rules/bulk', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds, action: bulkAction }),
+    })
+    const json = await response.json().catch(() => ({}))
+    setBulkSaving(false)
+    if (response.ok) {
+      setSelectedIds(new Set())
+      setMessage(`${Number(json.updated || productIds.length)}商品を一括変更しました。次回同期で反映されます。`)
+      await load()
+    } else {
+      setMessage(json.error || '一括変更に失敗しました。')
+    }
   }
 
   async function runSync() {
@@ -179,7 +253,7 @@ export default function ShopifySyncDashboard() {
       </header>
 
       <section className={styles.stats}>
-        <div><span>対象商品</span><strong>{data?.total ?? '—'}</strong></div>
+        <div><span>対象商品</span><strong>{data?.exclusionCounts?.all ?? '—'}</strong></div>
         <div><span>有効なエラー</span><strong className={data?.activeErrorCount ? styles.danger : ''}>{data?.activeErrorCount ?? '—'}</strong></div>
         <div><span>最終同期</span><strong>{formatDate(latestRun?.started_at)}</strong></div>
         <div><span>最終結果</span><strong>{String(latestRun?.status || '—')}</strong></div>
@@ -215,6 +289,22 @@ export default function ShopifySyncDashboard() {
           setSubmittedQuery(query)
         }}
       >
+        <select
+          className={styles.filterSelect}
+          value={filter}
+          onChange={(event) => {
+            setFilter(event.target.value as ExclusionFilter)
+            setPage(1)
+            setSelectedIds(new Set())
+          }}
+          aria-label="除外状態で絞り込み"
+        >
+          {(Object.keys(FILTER_LABELS) as ExclusionFilter[]).map((value) => (
+            <option value={value} key={value}>
+              {FILTER_LABELS[value]} ({data?.exclusionCounts?.[value] ?? 0})
+            </option>
+          ))}
+        </select>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -227,6 +317,36 @@ export default function ShopifySyncDashboard() {
         <button type="button" className={styles.textButton} onClick={load}>再読み込み</button>
       </form>
 
+      <section className={styles.bulkBar}>
+        <label className={styles.bulkSelectAll}>
+          <input type="checkbox" checked={allPageSelected} onChange={togglePageSelection} />
+          表示中を一括選択
+        </label>
+        <strong>{selectedIds.size}商品を選択中</strong>
+        <select
+          value={bulkAction}
+          onChange={(event) => setBulkAction(event.target.value as BulkAction)}
+          disabled={!selectedIds.size || bulkSaving}
+        >
+          {(Object.keys(BULK_ACTION_LABELS) as BulkAction[]).map((value) => (
+            <option value={value} key={value}>{BULK_ACTION_LABELS[value]}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={!selectedIds.size || bulkSaving}
+          onClick={runBulkAction}
+        >
+          {bulkSaving ? '処理中…' : '一括処理'}
+        </button>
+        {selectedIds.size > 0 && (
+          <button type="button" className={styles.textButton} onClick={() => setSelectedIds(new Set())}>
+            選択解除
+          </button>
+        )}
+      </section>
+
       {loading ? (
         <div className={styles.loading}>読み込み中…</div>
       ) : !data?.ok ? (
@@ -234,7 +354,18 @@ export default function ShopifySyncDashboard() {
       ) : (
         <div className={styles.productGrid}>
           {data.products.map((product) => (
-            <article className={`${styles.productCard} ${product.errors.length ? styles.hasError : ''}`} key={product.productId}>
+            <article
+              className={`${styles.productCard} ${product.errors.length ? styles.hasError : ''} ${selectedIds.has(product.productId) ? styles.isSelected : ''}`}
+              key={product.productId}
+            >
+              <label className={styles.cardSelector}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(product.productId)}
+                  onChange={(event) => toggleProduct(product.productId, event.target.checked)}
+                />
+                選択
+              </label>
               <div className={styles.productTop}>
                 <div className={styles.imageWrap}>
                   {/* External ColorMe images use many hosts, so keep a plain img here. */}
@@ -256,6 +387,8 @@ export default function ShopifySyncDashboard() {
                       </span>
                     )}
                     {product.isReserved && <span className={styles.reservedBadge}>手動予約</span>}
+                    {product.exclusionType === 'manual' && <span className={styles.manualExcludedBadge}>手動除外中</span>}
+                    {product.exclusionType === 'automatic' && <span className={styles.autoExcludedBadge}>自動除外中</span>}
                     {product.statusReason && (
                       <span>{STATUS_REASON_LABELS[product.statusReason] || product.statusReason}</span>
                     )}
@@ -290,15 +423,6 @@ export default function ShopifySyncDashboard() {
                     onChange={(event) => saveRule(product, { isReserved: event.target.checked })}
                   />
                   手動で予約扱い（下書き）
-                </label>
-                <label className={styles.checkboxLabel}>
-                  <input
-                    type="checkbox"
-                    checked={product.allowVariantDelete}
-                    disabled={savingId === product.productId}
-                    onChange={(event) => saveRule(product, { allowVariantDelete: event.target.checked })}
-                  />
-                  削除されたSKUをShopifyから削除許可
                 </label>
                 <label>
                   メモ

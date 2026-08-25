@@ -26,11 +26,18 @@
 .errorBox { background: #fff0f1; border: 1px solid #e6afb4; color: #8b1b24; }
 .toolbar { max-width: 1500px; margin: 0 auto 18px; display: flex; gap: 9px; align-items: center; }
 .toolbar input { flex: 1; min-width: 180px; }
-.toolbar input, .controls input, .controls select, .loginCard input { background: #fff; color: #161616; border: 1px solid #cfcfc9; border-radius: 9px; padding: 11px 12px; font: inherit; }
+.toolbar input, .toolbar select, .controls input, .controls select, .loginCard input, .bulkBar select { background: #fff; color: #161616; border: 1px solid #cfcfc9; border-radius: 9px; padding: 11px 12px; font: inherit; }
+.filterSelect { min-width: 190px; }
+.bulkBar { max-width: 1500px; margin: -6px auto 18px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: #fff; border: 1px solid #deded8; border-radius: 12px; }
+.bulkBar strong { margin-right: auto; font-size: 13px; }
+.bulkSelectAll { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
+.bulkSelectAll input, .cardSelector input { width: 17px; height: 17px; }
 .loading { max-width: 1500px; margin: 40px auto; text-align: center; color: #777; }
 .productGrid { max-width: 1500px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .productCard { background: #fff; border: 1px solid #deded8; border-radius: 14px; padding: 16px; }
 .productCard.hasError { border-color: #dc7c85; box-shadow: inset 4px 0 #c92e3e; }
+.productCard.isSelected { border-color: #1d1d1d; box-shadow: 0 0 0 2px rgba(0,0,0,.08); }
+.cardSelector { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin: -2px 0 8px; color: #555; font-size: 11px; font-weight: 700; }
 .productTop { display: flex; gap: 14px; }
 .imageWrap { width: 86px; height: 86px; flex: 0 0 86px; display: grid; place-items: center; overflow: hidden; border-radius: 10px; background: #f0f0ed; color: #999; font-size: 10px; }
 .imageWrap img { width: 100%; height: 100%; object-fit: cover; }
@@ -42,8 +49,10 @@
 .badges span { background: #eee; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; }
 .badges .reservedBadge { background: #ffe4aa; }
 .badges .sourceReservedBadge { background: #1f1f1f; color: #fff; }
+.badges .manualExcludedBadge { background: #ffe0c4; color: #733500; }
+.badges .autoExcludedBadge { background: #dce9ff; color: #173f79; }
 .inlineError { margin-top: 12px; padding: 9px 11px; border-radius: 8px; background: #fff0f1; color: #8b1b24; font-size: 12px; }
-.controls { display: grid; grid-template-columns: 170px 190px 220px minmax(0,1fr); gap: 12px; margin-top: 15px; padding-top: 14px; border-top: 1px solid #ecece7; align-items: end; }
+.controls { display: grid; grid-template-columns: 170px 210px minmax(0,1fr); gap: 12px; margin-top: 15px; padding-top: 14px; border-top: 1px solid #ecece7; align-items: end; }
 .controls label { display: grid; gap: 6px; color: #666; font-size: 11px; }
 .controls input, .controls select { width: 100%; padding: 9px; }
 .controls .checkboxLabel { display: flex; flex-direction: row; align-items: center; min-height: 38px; color: #333; }
@@ -62,6 +71,7 @@
   .page { padding: 24px 13px 60px; }
   .stats { grid-template-columns: 1fr 1fr; }
   .toolbar { flex-wrap: wrap; }
+  .filterSelect { flex-basis: 100%; }
   .toolbar input { flex-basis: 100%; }
   .headerActions { width: 100%; }
   .headerActions button { flex: 1; }
