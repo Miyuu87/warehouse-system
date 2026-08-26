@@ -236,16 +236,31 @@ export default function ShopifySyncDashboard() {
     if (!confirm('既存商品のメイン画像をカラーミーの最新版へ一括更新しますか？\n商品数が多いため、複数回に分けて処理します。')) return
     setImageRunning(true)
     setMessage('')
-    const response = await fetch('/api/shopify-sync-admin/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'main_image_refresh_start' }),
-    })
-    const json = await response.json().catch(() => ({}))
-    setImageRunning(false)
-    setMessage(response.ok
-      ? '画像一括更新を開始しました。CRONが残りの商品を順次処理します。'
-      : json.error || '画像一括更新を開始できませんでした。')
+    try {
+      const response = await fetch('/api/shopify-sync-admin/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'main_image_refresh_start' }),
+      })
+      const text = await response.text()
+      let json: { error?: string } = {}
+      try {
+        json = text ? JSON.parse(text) : {}
+      } catch {
+        // HTMLエラーなど、JSON以外の応答も画面に表示する。
+      }
+
+      if (response.ok) {
+        setMessage('画像一括更新を開始しました。CRONが残りの商品を順次処理します。')
+      } else {
+        const detail = json.error || text.slice(0, 300) || '応答内容なし'
+        setMessage(`画像一括更新を開始できませんでした（HTTP ${response.status}）: ${detail}`)
+      }
+    } catch (error) {
+      setMessage(`画像一括更新を開始できませんでした: ${error instanceof Error ? error.message : '通信エラー'}`)
+    } finally {
+      setImageRunning(false)
+    }
   }
 
   async function logout() {
