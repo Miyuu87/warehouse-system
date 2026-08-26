@@ -48,7 +48,6 @@
 .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .badges span { background: #eee; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; }
 .badges .reservedBadge { background: #ffe4aa; }
-.badges .sourceReservedBadge { background: #1f1f1f; color: #fff; }
 .badges .manualExcludedBadge { background: #ffe0c4; color: #733500; }
 .badges .autoExcludedBadge { background: #dce9ff; color: #173f79; }
 .inlineError { margin-top: 12px; padding: 9px 11px; border-radius: 8px; background: #fff0f1; color: #8b1b24; font-size: 12px; }

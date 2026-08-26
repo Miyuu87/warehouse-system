@@ -21,8 +21,6 @@ type SyncProduct = {
   variantCount: number
   shopifyMode: 'auto' | 'force_draft' | 'force_active' | 'force_archive'
   isReserved: boolean
-  sourceIsReserved: boolean
-  reservationSource: string
   note: string
   shopifyProductId: string
   lastStatus: string
@@ -56,10 +54,10 @@ type BulkAction =
   | 'unreserve_manual'
 
 type RunSummary = {
-  reservation_probe_status?: string
-  reservation_products?: number
-  reservation_fields?: string[]
-  reservation_candidate_fields?: string[]
+  image_refresh_active?: boolean
+  image_refresh_offset?: number
+  image_refresh_total?: number
+  image_refresh_remaining?: number
 }
 
 const MODE_LABELS = {
@@ -71,7 +69,6 @@ const MODE_LABELS = {
 
 const STATUS_REASON_LABELS: Record<string, string> = {
   auto: '通常公開',
-  colorme_reserved: 'カラーミー予約のため下書き',
   manual_reserved: '手動予約のため下書き',
   zero_price: '0円のため下書き',
   colorme_hidden: 'カラーミー非掲載のためアーカイブ',
@@ -109,6 +106,7 @@ export default function ShopifySyncDashboard() {
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState('')
   const [running, setRunning] = useState(false)
+  const [imageRunning, setImageRunning] = useState(false)
   const [message, setMessage] = useState('')
 
   const load = useCallback(async () => {
@@ -224,10 +222,30 @@ export default function ShopifySyncDashboard() {
     if (!confirm('Shopify同期を今すぐ開始しますか？')) return
     setRunning(true)
     setMessage('')
-    const response = await fetch('/api/shopify-sync-admin/run', { method: 'POST' })
+    const response = await fetch('/api/shopify-sync-admin/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'catalog' }),
+    })
     const json = await response.json().catch(() => ({}))
     setRunning(false)
     setMessage(response.ok ? '同期を開始しました。数分後に再読み込みしてください。' : json.error)
+  }
+
+  async function runImageRefresh() {
+    if (!confirm('既存商品のメイン画像をカラーミーの最新版へ一括更新しますか？\n商品数が多いため、複数回に分けて処理します。')) return
+    setImageRunning(true)
+    setMessage('')
+    const response = await fetch('/api/shopify-sync-admin/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'main_image_refresh_start' }),
+    })
+    const json = await response.json().catch(() => ({}))
+    setImageRunning(false)
+    setMessage(response.ok
+      ? '画像一括更新を開始しました。CRONが残りの商品を順次処理します。'
+      : json.error || '画像一括更新を開始できませんでした。')
   }
 
   async function logout() {
@@ -248,6 +266,9 @@ export default function ShopifySyncDashboard() {
           <button className={styles.primaryButton} onClick={runSync} disabled={running}>
             {running ? '開始中…' : '今すぐ同期'}
           </button>
+          <button className={styles.secondaryButton} onClick={runImageRefresh} disabled={imageRunning || running}>
+            {imageRunning ? '開始中…' : 'メイン画像を一括更新'}
+          </button>
           <button className={styles.secondaryButton} onClick={logout}>ログアウト</button>
         </div>
       </header>
@@ -260,21 +281,10 @@ export default function ShopifySyncDashboard() {
       </section>
 
       {message && <div className={styles.notice}>{message}</div>}
-      {latestSummary?.reservation_probe_status === 'recognized' && (
+      {latestSummary?.image_refresh_active && (
         <div className={styles.notice}>
-          カラーミー予約フラグ取得済み：{Number(latestSummary.reservation_products || 0)}商品
-          {latestSummary.reservation_fields?.length
-            ? `（${latestSummary.reservation_fields.join(', ')}）`
-            : ''}
-        </div>
-      )}
-      {latestSummary?.reservation_probe_status === 'not_found' && (
-        <div className={styles.warningBox}>
-          カラーミー商品API内に予約フラグを確認できませんでした。
-          予約商品の自動下書きはまだ有効になっていません。
-          {latestSummary.reservation_candidate_fields?.length
-            ? ` 候補項目：${latestSummary.reservation_candidate_fields.join(', ')}`
-            : ''}
+          メイン画像を一括更新中：{Number(latestSummary.image_refresh_offset || 0)} / {Number(latestSummary.image_refresh_total || 0)}商品
+          （残り {Number(latestSummary.image_refresh_remaining || 0)}商品）
         </div>
       )}
       {data?.globalErrors?.map((error) => (
@@ -379,13 +389,6 @@ export default function ShopifySyncDashboard() {
                   <div className={styles.badges}>
                     <span>在庫 {product.totalStock}</span>
                     <span>{product.variantCount} SKU</span>
-                    {product.sourceIsReserved && (
-                      <span className={styles.sourceReservedBadge}>
-                        {product.shopifyMode === 'force_active'
-                          ? 'カラーミー予約・手動公開中'
-                          : 'カラーミー予約 → 下書き'}
-                      </span>
-                    )}
                     {product.isReserved && <span className={styles.reservedBadge}>手動予約</span>}
                     {product.exclusionType === 'manual' && <span className={styles.manualExcludedBadge}>手動除外中</span>}
                     {product.exclusionType === 'automatic' && <span className={styles.autoExcludedBadge}>自動除外中</span>}
