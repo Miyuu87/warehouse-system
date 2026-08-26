@@ -53,11 +53,34 @@ type BulkAction =
   | 'reserve_manual'
   | 'unreserve_manual'
 
-type RunSummary = {
-  image_refresh_active?: boolean
-  image_refresh_offset?: number
-  image_refresh_total?: number
-  image_refresh_remaining?: number
+type ImageRefreshError = {
+  product_id?: string
+  product_name?: string
+  type?: string
+  message: string
+  occurred_at?: string
+}
+
+type ImageRefreshProgress = {
+  ok: boolean
+  active: boolean
+  status: string
+  total: number
+  completed: number
+  remaining: number
+  percent: number
+  batch_size: number
+  interval_minutes: number
+  estimated_remaining_seconds: number | null
+  estimated_remaining_hours: number | null
+  started_at: string | null
+  updated_at: string | null
+  finished_at: string | null
+  last_batch_count: number
+  error_count: number
+  last_error: string | null
+  errors: ImageRefreshError[]
+  error?: string
 }
 
 const MODE_LABELS = {
@@ -107,6 +130,8 @@ export default function ShopifySyncDashboard() {
   const [savingId, setSavingId] = useState('')
   const [running, setRunning] = useState(false)
   const [imageRunning, setImageRunning] = useState(false)
+  const [imageProgress, setImageProgress] = useState<ImageRefreshProgress | null>(null)
+  const [imageProgressError, setImageProgressError] = useState('')
   const [message, setMessage] = useState('')
 
   const load = useCallback(async () => {
@@ -132,15 +157,39 @@ export default function ShopifySyncDashboard() {
     return () => window.clearTimeout(timer)
   }, [load])
 
+  const loadImageProgress = useCallback(async () => {
+    try {
+      const response = await fetch('/api/shopify-sync-admin/image-refresh-status', { cache: 'no-store' })
+      if (response.status === 401) {
+        router.replace('/shopify-sync/login')
+        return
+      }
+      const json = (await response.json().catch(() => ({}))) as ImageRefreshProgress
+      if (!response.ok || !json.ok) {
+        setImageProgressError(json.error || '画像更新の進捗を取得できませんでした。')
+        return
+      }
+      setImageProgress(json)
+      setImageProgressError('')
+    } catch (error) {
+      setImageProgressError(
+        `画像更新の進捗を取得できませんでした: ${error instanceof Error ? error.message : '通信エラー'}`
+      )
+    }
+  }, [router])
+
+  useEffect(() => {
+    void loadImageProgress()
+    const interval = window.setInterval(
+      () => void loadImageProgress(),
+      imageProgress?.active ? 15_000 : 60_000
+    )
+    return () => window.clearInterval(interval)
+  }, [imageProgress?.active, loadImageProgress])
+
   const latestRun = useMemo(() => data?.runs?.[0] || null, [data])
   const pageProductIds = useMemo(() => data?.products.map((product) => product.productId) || [], [data])
   const allPageSelected = pageProductIds.length > 0 && pageProductIds.every((id) => selectedIds.has(id))
-  const latestSummary = useMemo(
-    () => (latestRun?.summary && typeof latestRun.summary === 'object'
-      ? latestRun.summary as RunSummary
-      : null),
-    [latestRun]
-  )
 
   function updateLocal(productId: string, changes: Partial<SyncProduct>) {
     setData((current) =>
@@ -252,6 +301,7 @@ export default function ShopifySyncDashboard() {
 
       if (response.ok) {
         setMessage('画像一括更新を開始しました。CRONが残りの商品を順次処理します。')
+        await loadImageProgress()
       } else {
         const detail = json.error || text.slice(0, 300) || '応答内容なし'
         setMessage(`画像一括更新を開始できませんでした（HTTP ${response.status}）: ${detail}`)
@@ -281,8 +331,12 @@ export default function ShopifySyncDashboard() {
           <button className={styles.primaryButton} onClick={runSync} disabled={running}>
             {running ? '開始中…' : '今すぐ同期'}
           </button>
-          <button className={styles.secondaryButton} onClick={runImageRefresh} disabled={imageRunning || running}>
-            {imageRunning ? '開始中…' : 'メイン画像を一括更新'}
+          <button
+            className={styles.secondaryButton}
+            onClick={runImageRefresh}
+            disabled={imageRunning || running || Boolean(imageProgress?.active)}
+          >
+            {imageRunning ? '開始中…' : imageProgress?.active ? '画像更新中…' : 'メイン画像を一括更新'}
           </button>
           <button className={styles.secondaryButton} onClick={logout}>ログアウト</button>
         </div>
@@ -296,12 +350,11 @@ export default function ShopifySyncDashboard() {
       </section>
 
       {message && <div className={styles.notice}>{message}</div>}
-      {latestSummary?.image_refresh_active && (
-        <div className={styles.notice}>
-          メイン画像を一括更新中：{Number(latestSummary.image_refresh_offset || 0)} / {Number(latestSummary.image_refresh_total || 0)}商品
-          （残り {Number(latestSummary.image_refresh_remaining || 0)}商品）
-        </div>
-      )}
+      <ImageRefreshProgressPanel
+        progress={imageProgress}
+        error={imageProgressError}
+        onRefresh={() => void loadImageProgress()}
+      />
       {data?.globalErrors?.map((error) => (
         <div className={styles.errorBox} key={error.id}>{error.message}</div>
       ))}
@@ -469,6 +522,159 @@ export default function ShopifySyncDashboard() {
       </nav>
     </main>
   )
+}
+
+function ImageRefreshProgressPanel({
+  progress,
+  error,
+  onRefresh,
+}: {
+  progress: ImageRefreshProgress | null
+  error: string
+  onRefresh: () => void
+}) {
+  if (!progress && !error) {
+    return (
+      <section className={styles.imageProgressCard}>
+        <div className={styles.progressHeader}>
+          <div>
+            <div className={styles.progressTitle}>メイン画像一括更新</div>
+            <p>進捗を読み込んでいます…</p>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  const active = Boolean(progress?.active)
+  const failed = progress?.status === 'failed'
+  const hasErrors = Number(progress?.error_count || 0) > 0
+  const isCounting = active && Number(progress?.total || 0) === 0
+  const statusClass = failed || hasErrors
+    ? styles.statusError
+    : active
+      ? styles.statusActive
+      : styles.statusComplete
+
+  return (
+    <section className={styles.imageProgressCard}>
+      <div className={styles.progressHeader}>
+        <div>
+          <div className={styles.progressTitle}>メイン画像一括更新</div>
+          <p>
+            {isCounting
+              ? '対象件数を集計中です。最初のCRON実行後に件数と残り時間が表示されます。'
+              : imageStatusDescription(progress)}
+          </p>
+        </div>
+        <div className={styles.progressHeaderActions}>
+          {progress && (
+            <span className={`${styles.statusBadge} ${statusClass}`}>
+              {imageStatusLabel(progress.status)}
+            </span>
+          )}
+          <button type="button" className={styles.progressRefresh} onClick={onRefresh}>
+            進捗を更新
+          </button>
+        </div>
+      </div>
+
+      {error && <div className={styles.progressFetchError}>{error}</div>}
+
+      {progress && (
+        <>
+          <div
+            className={styles.progressTrack}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress.percent || 0)}
+            aria-label="メイン画像更新の進捗"
+          >
+            <div className={styles.progressFill} style={{ width: `${Math.max(0, Math.min(100, progress.percent || 0))}%` }} />
+          </div>
+
+          <div className={styles.progressMetrics}>
+            <div className={styles.progressMetric}>
+              <span>完了</span>
+              <strong>{numberFormat(progress.completed)} / {progress.total ? numberFormat(progress.total) : '集計中'}</strong>
+            </div>
+            <div className={styles.progressMetric}>
+              <span>残り</span>
+              <strong>{progress.total ? `${numberFormat(progress.remaining)}件` : '—'}</strong>
+            </div>
+            <div className={styles.progressMetric}>
+              <span>推定残り時間</span>
+              <strong>{formatDuration(progress.estimated_remaining_seconds)}</strong>
+            </div>
+            <div className={styles.progressMetric}>
+              <span>最終完了</span>
+              <strong>{formatDate(progress.finished_at)}</strong>
+            </div>
+          </div>
+
+          <div className={styles.progressMeta}>
+            <span>進捗 {Number(progress.percent || 0).toFixed(1)}%</span>
+            <span>開始 {formatDate(progress.started_at)}</span>
+            <span>最終更新 {formatDate(progress.updated_at)}</span>
+            <span>1回 {numberFormat(progress.batch_size)}件・約{numberFormat(progress.interval_minutes)}分間隔</span>
+          </div>
+
+          {(hasErrors || progress.last_error) && (
+            <div className={styles.progressErrors}>
+              <strong>エラー {numberFormat(progress.error_count)}件</strong>
+              {progress.last_error && <p>最新: {progress.last_error}</p>}
+              {progress.errors.slice(-10).reverse().map((item, index) => (
+                <div className={styles.progressErrorItem} key={`${item.occurred_at || ''}-${item.product_id || ''}-${index}`}>
+                  <span>{formatDate(item.occurred_at)}</span>
+                  <b>{item.product_name || (item.product_id ? `商品ID ${item.product_id}` : item.type || 'エラー')}</b>
+                  <span>{item.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+function imageStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    idle: '未実行',
+    queued: '開始待ち',
+    running: '処理中',
+    completed: '完了',
+    completed_with_errors: 'エラーあり完了',
+    failed: '失敗',
+  }
+  return labels[status] || status || '未実行'
+}
+
+function imageStatusDescription(progress: ImageRefreshProgress | null) {
+  if (!progress) return '進捗情報はまだありません。'
+  if (progress.status === 'queued') return '更新要求を受け付けました。次のCRON実行を待っています。'
+  if (progress.status === 'running') return 'CRONが100件ずつ順番に更新しています。画面は15秒ごとに自動更新されます。'
+  if (progress.status === 'completed') return 'すべてのメイン画像の更新が完了しました。'
+  if (progress.status === 'completed_with_errors') return '更新は完了しましたが、一部の商品でエラーがありました。'
+  if (progress.status === 'failed') return '処理が停止しました。下のエラー内容を確認してください。'
+  return '「メイン画像を一括更新」を押すと、進捗がここに表示されます。'
+}
+
+function formatDuration(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '—'
+  const totalMinutes = Math.max(0, Math.ceil(value / 60))
+  if (totalMinutes === 0) return 'まもなく完了'
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `約${days}日${hours ? `${hours}時間` : ''}`
+  if (hours > 0) return `約${hours}時間${minutes ? `${minutes}分` : ''}`
+  return `約${minutes}分`
+}
+
+function numberFormat(value: number | null | undefined) {
+  return new Intl.NumberFormat('ja-JP').format(Number(value || 0))
 }
 
 function formatDate(value: unknown) {
