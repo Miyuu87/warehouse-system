@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     const manualExcluded =
       shopifyMode === 'force_draft' || shopifyMode === 'force_archive' || isReserved
     const automaticExcluded =
-      !manualExcluded && ['colorme_reserved', 'zero_price', 'colorme_hidden'].includes(statusReason)
+      !manualExcluded && ['zero_price', 'colorme_hidden'].includes(statusReason)
     const exclusionType: ExclusionType = manualExcluded
       ? 'manual'
       : automaticExcluded
@@ -111,8 +111,6 @@ export async function GET(request: NextRequest) {
       variantCount: variants.length,
       shopifyMode,
       isReserved,
-      sourceIsReserved: Boolean(mapping?.source_is_reserved),
-      reservationSource: mapping?.reservation_source || '',
       note: rule?.note || '',
       shopifyProductId: mapping?.shopify_product_id || '',
       lastStatus: mapping?.last_status || '',
@@ -150,9 +148,6 @@ export async function GET(request: NextRequest) {
     if (a.exclusionType !== b.exclusionType) {
       const order: Record<ExclusionType, number> = { manual: 0, automatic: 1, none: 2 }
       return order[a.exclusionType] - order[b.exclusionType]
-    }
-    if (a.sourceIsReserved !== b.sourceIsReserved) {
-      return Number(b.sourceIsReserved) - Number(a.sourceIsReserved)
     }
     if (a.isReserved !== b.isReserved) return Number(b.isReserved) - Number(a.isReserved)
     return b.productId.localeCompare(a.productId, 'ja', { numeric: true })
