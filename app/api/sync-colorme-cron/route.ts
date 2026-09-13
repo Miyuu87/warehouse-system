@@ -189,6 +189,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       mode: 'cron_stateful',
+      limit: LIMIT, // ←ここに追加
       startOffset,
       nextOffset: offset,
       processedPages: Math.ceil(totalFetchedProducts / LIMIT),
