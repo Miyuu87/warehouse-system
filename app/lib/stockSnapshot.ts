@@ -22,9 +22,7 @@ export async function saveStockSnapshot(supabase: SupabaseClient) {
       .order('sku', { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1)
 
-    if (productError) {
-      throw new Error(productError.message)
-    }
+    if (productError) throw new Error(productError.message)
 
     const rows: StockRow[] = (products || [])
       .filter((row) => row.sku)
@@ -34,7 +32,6 @@ export async function saveStockSnapshot(supabase: SupabaseClient) {
       }))
 
     if (rows.length === 0) break
-
     scannedCount += rows.length
 
     for (let i = 0; i < rows.length; i += LOOKUP_CHUNK_SIZE) {
@@ -46,40 +43,42 @@ export async function saveStockSnapshot(supabase: SupabaseClient) {
         .select('sku, stock')
         .in('sku', skus)
 
-      if (stateError) {
-        throw new Error(stateError.message)
-      }
+      if (stateError) throw new Error(stateError.message)
 
       const stateMap = new Map(
         (states || []).map((row) => [String(row.sku), Number(row.stock || 0)])
       )
 
-      const changedRows = chunk.filter(
-        (row) => !stateMap.has(row.sku) || stateMap.get(row.sku) !== row.stock
-      )
+      const changedRows = chunk
+        .filter((row) => !stateMap.has(row.sku) || stateMap.get(row.sku) !== row.stock)
+        .map((row) => ({
+          sku: row.sku,
+          previous_stock: stateMap.has(row.sku) ? stateMap.get(row.sku)! : null,
+          stock: row.stock,
+        }))
 
       if (changedRows.length === 0) continue
 
+      // Keep the legacy history intact. New changes go to the compact event table.
       const { error: historyError } = await supabase
-        .from('stock_history')
+        .from('stock_change_history')
         .insert(changedRows)
 
-      if (historyError) {
-        throw new Error(historyError.message)
-      }
+      if (historyError) throw new Error(historyError.message)
 
       const now = new Date().toISOString()
       const { error: stateUpsertError } = await supabase
         .from('stock_snapshot_state')
         .upsert(
-          changedRows.map((row) => ({ ...row, updated_at: now })),
+          changedRows.map((row) => ({
+            sku: row.sku,
+            stock: row.stock,
+            updated_at: now,
+          })),
           { onConflict: 'sku' }
         )
 
-      if (stateUpsertError) {
-        throw new Error(stateUpsertError.message)
-      }
-
+      if (stateUpsertError) throw new Error(stateUpsertError.message)
       changedCount += changedRows.length
     }
 
